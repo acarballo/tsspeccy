@@ -1,0 +1,21 @@
+{
+  "name": "tsspeccy",
+  "version": "0.1.0",
+  "description": "ZX Spectrum 48K emulator in TypeScript",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:ui": "vitest --ui",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "typescript": "^5.4.0",
+    "vite": "^5.0.0",
+    "vitest": "^1.6.0",
+    "@vitest/ui": "^1.6.0"
+  }
+}
