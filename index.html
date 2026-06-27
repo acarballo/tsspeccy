@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>tsspeccy — ZX Spectrum 48K</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: #1a1a1a;
+      color: #e0e0e0;
+      font-family: 'Courier New', monospace;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      min-height: 100vh;
+      padding: 24px 16px;
+      gap: 16px;
+    }
+
+    h1 {
+      font-size: 1.4rem;
+      letter-spacing: 0.15em;
+      color: #00d7d7;
+    }
+    h1 span { color: #d7d700; }
+
+    /* ── Canvas ─────────────────────────────────────────────────── */
+    .screen-wrap {
+      position: relative;
+      border: 3px solid #444;
+      border-radius: 4px;
+      overflow: hidden;
+      cursor: default;
+    }
+
+    #screen {
+      display: block;
+      /* Scale 320×240 → 640×480 with crisp pixels */
+      width: 640px;
+      height: 480px;
+      image-rendering: pixelated;
+      background: #000;
+    }
+
+    .screen-wrap.drag-over::after {
+      content: 'Drop ROM here';
+      position: absolute;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.5rem;
+      background: rgba(0, 215, 215, 0.25);
+      border: 2px dashed #00d7d7;
+      color: #00d7d7;
+      pointer-events: none;
+    }
+
+    /* ── Controls ───────────────────────────────────────────────── */
+    .controls {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+      flex-wrap: wrap;
+      justify-content: center;
+    }
+
+    button {
+      padding: 8px 20px;
+      border: 1px solid #555;
+      border-radius: 3px;
+      background: #2a2a2a;
+      color: #e0e0e0;
+      font-family: inherit;
+      font-size: 0.85rem;
+      cursor: pointer;
+      letter-spacing: 0.05em;
+      transition: background 0.15s, border-color 0.15s;
+    }
+    button:hover:not(:disabled) { background: #3a3a3a; border-color: #888; }
+    button:disabled              { opacity: 0.35; cursor: not-allowed; }
+    button.primary               { border-color: #00d7d7; color: #00d7d7; }
+    button.primary:hover:not(:disabled) { background: #00d7d720; }
+
+    .status-bar {
+      font-size: 0.78rem;
+      color: #888;
+      min-height: 1.2em;
+    }
+
+    footer {
+      margin-top: auto;
+      font-size: 0.7rem;
+      color: #444;
+    }
+  </style>
+</head>
+<body>
+
+  <h1>ts<span>speccy</span></h1>
+
+  <div class="screen-wrap" id="screen-wrap">
+    <canvas id="screen"></canvas>
+  </div>
+
+  <div class="controls">
+    <button id="btn-load" class="primary">📂 Load ROM</button>
+    <button id="btn-start" disabled>▶ Start</button>
+    <button id="btn-stop"  disabled>⏹ Stop</button>
+    <button id="btn-reset" disabled>↺ Reset</button>
+  </div>
+
+  <p class="status-bar"><span id="status"></span></p>
+
+  <footer>ZX Spectrum 48K emulator · TypeScript + Canvas</footer>
+
+  <input type="file" id="rom-input" accept=".rom,.bin" style="display:none" />
+
+  <script type="module" src="/src/main.ts"></script>
+</body>
+</html>
