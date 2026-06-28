@@ -1,14 +1,9 @@
 /**
  * main.ts — browser entry point
- *
- * Handles:
- *  - ROM file drag-and-drop / file picker
- *  - Start / Stop / Reset controls
- *  - Status display
  */
 import { Spectrum } from './Spectrum.js'
 
-const canvas  = document.getElementById('screen')  as HTMLCanvasElement
+const canvas   = document.getElementById('screen')   as HTMLCanvasElement
 const btnLoad  = document.getElementById('btn-load')  as HTMLButtonElement
 const btnStart = document.getElementById('btn-start') as HTMLButtonElement
 const btnStop  = document.getElementById('btn-stop')  as HTMLButtonElement
@@ -22,11 +17,13 @@ function setStatus(msg: string): void {
   statusEl.textContent = msg
 }
 
+// ── ROM loading ────────────────────────────────────────────────────
+
 async function loadROM(file: File): Promise<void> {
   try {
     const buf = await file.arrayBuffer()
     spectrum.loadROM(new Uint8Array(buf))
-    setStatus(`ROM loaded: ${file.name} (${buf.byteLength} bytes)`)
+    setStatus(`ROM loaded: ${file.name} (${buf.byteLength} bytes) — click Start`)
     btnStart.disabled = false
     btnReset.disabled = false
   } catch (e) {
@@ -34,7 +31,6 @@ async function loadROM(file: File): Promise<void> {
   }
 }
 
-// ── File picker ────────────────────────────────────────────────────
 btnLoad.addEventListener('click', () => fileInput.click())
 fileInput.addEventListener('change', () => {
   const file = fileInput.files?.[0]
@@ -42,21 +38,28 @@ fileInput.addEventListener('change', () => {
 })
 
 // ── Drag and drop ──────────────────────────────────────────────────
-canvas.addEventListener('dragover', e => { e.preventDefault(); canvas.classList.add('drag-over') })
-canvas.addEventListener('dragleave', () => canvas.classList.remove('drag-over'))
-canvas.addEventListener('drop', e => {
+
+const screenWrap = document.getElementById('screen-wrap')!
+screenWrap.addEventListener('dragover', e => {
   e.preventDefault()
-  canvas.classList.remove('drag-over')
+  screenWrap.classList.add('drag-over')
+})
+screenWrap.addEventListener('dragleave', () => screenWrap.classList.remove('drag-over'))
+screenWrap.addEventListener('drop', e => {
+  e.preventDefault()
+  screenWrap.classList.remove('drag-over')
   const file = e.dataTransfer?.files[0]
   if (file) loadROM(file)
 })
 
 // ── Controls ───────────────────────────────────────────────────────
+
 btnStart.addEventListener('click', () => {
   spectrum.start()
   setStatus('Running…')
   btnStart.disabled = true
   btnStop.disabled  = false
+  canvas.focus()
 })
 
 btnStop.addEventListener('click', () => {
@@ -71,6 +74,37 @@ btnReset.addEventListener('click', () => {
   setStatus('Reset — running…')
   btnStart.disabled = true
   btnStop.disabled  = false
+  canvas.focus()
 })
+
+// ── Keyboard ───────────────────────────────────────────────────────
+// Canvas must be focusable to receive key events
+
+canvas.setAttribute('tabindex', '0')
+
+canvas.addEventListener('keydown', e => {
+  // Prevent browser shortcuts (F5, arrows, space scrolling…)
+  const blocked = ['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight',
+                   'F1','F2','F3','F4','F5','F6','F7','F8','F9','F10','F11','F12']
+  if (blocked.includes(e.code)) e.preventDefault()
+
+  spectrum.keyboard.keyDown(e.code)
+})
+
+canvas.addEventListener('keyup', e => {
+  spectrum.keyboard.keyUp(e.code)
+})
+
+// Re-focus canvas on click so keys work immediately
+canvas.addEventListener('click', () => canvas.focus())
+
+// ── Keyboard help overlay ──────────────────────────────────────────
+
+const helpEl = document.getElementById('kbd-help')
+document.getElementById('btn-help')?.addEventListener('click', () => {
+  if (helpEl) helpEl.classList.toggle('hidden')
+})
+
+// ── Init ──────────────────────────────────────────────────────────
 
 setStatus('Load a .rom file to begin.')

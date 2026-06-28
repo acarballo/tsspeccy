@@ -2,11 +2,23 @@ import { Memory } from '../memory/Memory.js'
 import { Registers } from './Registers.js'
 import { Flag, PARITY_TABLE } from './flags.js'
 
+/** Minimal I/O interface — keeps CPU decoupled from IOBus implementation */
+export interface IIOBus {
+  read(port: number): number
+  write(port: number, value: number): void
+}
+
+/** Default no-op bus used when no IOBus is connected (all reads return 0xFF) */
+class NullIOBus implements IIOBus {
+  read(_port: number): number { return 0xff }
+  write(_port: number, _value: number): void { /* noop */ }
+}
+
 /**
  * Z80 CPU emulator core.
  *
  * Usage:
- *   const cpu = new CPU(memory)
+ *   const cpu = new CPU(memory, ioBus)
  *   const tStates = cpu.step()   // execute one instruction
  */
 export class CPU {
@@ -14,7 +26,11 @@ export class CPU {
   halted = false
   tStates = 0  // total T-states elapsed
 
-  constructor(private readonly mem: Memory) {}
+  private readonly io: IIOBus
+
+  constructor(private readonly mem: Memory, ioBus?: IIOBus) {
+    this.io = ioBus ?? new NullIOBus()
+  }
 
   // ─────────────────────────────────────────────────────────────────
   // Memory helpers
@@ -587,8 +603,18 @@ export class CPU {
       case 0xd9: this.regs.exx(); cycles = 4; break
 
       // OUT (n),A  /  IN A,(n)
-      case 0xd3: { this.fetch(); /* port I/O stub */ cycles = 11; break }
-      case 0xdb: { this.fetch(); this.regs.A = 0xff; /* I/O stub */ cycles = 11; break }
+      // OUT (n),A  — full port = (A << 8) | n
+      case 0xd3: {
+        const portN = this.fetch()
+        this.io.write((this.regs.A << 8) | portN, this.regs.A)
+        cycles = 11; break
+      }
+      // IN A,(n)  — full port = (A << 8) | n
+      case 0xdb: {
+        const portN = this.fetch()
+        this.regs.A = this.io.read((this.regs.A << 8) | portN) & 0xff
+        cycles = 11; break
+      }
 
       default:
         // Unimplemented opcode — treat as NOP for now
