@@ -542,6 +542,9 @@ export class CPU {
       // CB prefix
       case 0xcb: cycles = this.executeCB(); break
 
+      // ED prefix
+      case 0xed: cycles = this.executeED(); break
+
       // CALL cc, nn
       case 0xc4: case 0xcc: case 0xd4: case 0xdc:
       case 0xe4: case 0xec: case 0xf4: case 0xfc: {
@@ -657,5 +660,362 @@ export class CPU {
     this.push(this.regs.PC)
     this.regs.PC = 0x0066
     this.tStates += 11
+  }
+
+  // ─────────────────────────────────────────────────────────────────
+  // ED-prefix: extended instructions
+  // Covers: 16-bit loads, block transfers, I/O block, ADC/SBC HL,rr
+  // ─────────────────────────────────────────────────────────────────
+  private executeED(): number {
+    const op = this.fetch()
+    let cycles = 8
+
+    switch (op) {
+      // ── SBC HL, rr  (0x42, 0x52, 0x62, 0x72) ─────────────────────
+      case 0x42: this.sbcHL(this.regs.BC); cycles = 15; break
+      case 0x52: this.sbcHL(this.regs.DE); cycles = 15; break
+      case 0x62: this.sbcHL(this.regs.HL); cycles = 15; break
+      case 0x72: this.sbcHL(this.regs.SP); cycles = 15; break
+
+      // ── ADC HL, rr  (0x4A, 0x5A, 0x6A, 0x7A) ─────────────────────
+      case 0x4a: this.adcHL(this.regs.BC); cycles = 15; break
+      case 0x5a: this.adcHL(this.regs.DE); cycles = 15; break
+      case 0x6a: this.adcHL(this.regs.HL); cycles = 15; break
+      case 0x7a: this.adcHL(this.regs.SP); cycles = 15; break
+
+      // ── LD (nn), rr / LD rr, (nn) ─────────────────────────────────
+      case 0x43: { const nn = this.rw(this.regs.PC); this.regs.PC = (this.regs.PC+2)&0xffff; this.ww(nn, this.regs.BC); cycles = 20; break }
+      case 0x53: { const nn = this.rw(this.regs.PC); this.regs.PC = (this.regs.PC+2)&0xffff; this.ww(nn, this.regs.DE); cycles = 20; break }
+      case 0x63: { const nn = this.rw(this.regs.PC); this.regs.PC = (this.regs.PC+2)&0xffff; this.ww(nn, this.regs.HL); cycles = 20; break }
+      case 0x73: { const nn = this.rw(this.regs.PC); this.regs.PC = (this.regs.PC+2)&0xffff; this.ww(nn, this.regs.SP); cycles = 20; break }
+
+      case 0x4b: { const nn = this.rw(this.regs.PC); this.regs.PC = (this.regs.PC+2)&0xffff; this.regs.BC = this.rw(nn); cycles = 20; break }
+      case 0x5b: { const nn = this.rw(this.regs.PC); this.regs.PC = (this.regs.PC+2)&0xffff; this.regs.DE = this.rw(nn); cycles = 20; break }
+      case 0x6b: { const nn = this.rw(this.regs.PC); this.regs.PC = (this.regs.PC+2)&0xffff; this.regs.HL = this.rw(nn); cycles = 20; break }
+      case 0x7b: { const nn = this.rw(this.regs.PC); this.regs.PC = (this.regs.PC+2)&0xffff; this.regs.SP = this.rw(nn); cycles = 20; break }
+
+      // ── LD A, I/R  /  LD I/R, A ───────────────────────────────────
+      case 0x47: this.regs.I = this.regs.A; cycles = 9; break
+      case 0x4f: this.regs.R = this.regs.A; cycles = 9; break
+      case 0x57: {
+        this.regs.A = this.regs.I
+        this.setSZF53(this.regs.A)
+        this.setFlag(Flag.H,  false)
+        this.setFlag(Flag.N,  false)
+        this.setFlag(Flag.PV, this.regs.IFF2)
+        cycles = 9; break
+      }
+      case 0x5f: {
+        this.regs.A = this.regs.R
+        this.setSZF53(this.regs.A)
+        this.setFlag(Flag.H,  false)
+        this.setFlag(Flag.N,  false)
+        this.setFlag(Flag.PV, this.regs.IFF2)
+        cycles = 9; break
+      }
+
+      // ── Interrupt mode ─────────────────────────────────────────────
+      case 0x46: case 0x66: this.regs.IM = 0; cycles = 8; break
+      case 0x56: case 0x76: this.regs.IM = 1; cycles = 8; break
+      case 0x5e: case 0x7e: this.regs.IM = 2; cycles = 8; break
+
+      // ── RETN / RETI ───────────────────────────────────────────────
+      case 0x45: case 0x55: case 0x65: case 0x75:  // RETN
+      case 0x4d: case 0x5d: case 0x6d: case 0x7d:  // RETI
+        this.regs.IFF1 = this.regs.IFF2
+        this.regs.PC = this.pop()
+        cycles = 14; break
+
+      // ── NEG ───────────────────────────────────────────────────────
+      case 0x44: case 0x4c: case 0x54: case 0x5c:
+      case 0x64: case 0x6c: case 0x74: case 0x7c: {
+        const a = this.regs.A
+        this.regs.A = 0
+        this.aluSub(a)
+        cycles = 8; break
+      }
+
+      // ── IN r, (C)  — read port BC, store in register r ────────────
+      case 0x40: this.regs.B = this.inC(); cycles = 12; break
+      case 0x48: this.regs.C = this.inC(); cycles = 12; break
+      case 0x50: this.regs.D = this.inC(); cycles = 12; break
+      case 0x58: this.regs.E = this.inC(); cycles = 12; break
+      case 0x60: this.regs.H = this.inC(); cycles = 12; break
+      case 0x68: this.regs.L = this.inC(); cycles = 12; break
+      case 0x70: this.inC(); cycles = 12; break  // IN F,(C) — flags only
+      case 0x78: this.regs.A = this.inC(); cycles = 12; break
+
+      // ── OUT (C), r ────────────────────────────────────────────────
+      case 0x41: this.io.write(this.regs.BC, this.regs.B); cycles = 12; break
+      case 0x49: this.io.write(this.regs.BC, this.regs.C); cycles = 12; break
+      case 0x51: this.io.write(this.regs.BC, this.regs.D); cycles = 12; break
+      case 0x59: this.io.write(this.regs.BC, this.regs.E); cycles = 12; break
+      case 0x61: this.io.write(this.regs.BC, this.regs.H); cycles = 12; break
+      case 0x69: this.io.write(this.regs.BC, this.regs.L); cycles = 12; break
+      case 0x71: this.io.write(this.regs.BC, 0); cycles = 12; break
+      case 0x79: this.io.write(this.regs.BC, this.regs.A); cycles = 12; break
+
+      // ── Block transfer: LDI, LDD, LDIR, LDDR ─────────────────────
+      case 0xa0: this.ldi(); cycles = 16; break   // LDI
+      case 0xa8: this.ldd(); cycles = 16; break   // LDD
+      case 0xb0: cycles = this.ldir(); break       // LDIR
+      case 0xb8: cycles = this.lddr(); break       // LDDR
+
+      // ── Block compare: CPI, CPD, CPIR, CPDR ──────────────────────
+      case 0xa1: this.cpi(); cycles = 16; break
+      case 0xa9: this.cpd(); cycles = 16; break
+      case 0xb1: cycles = this.cpir(); break
+      case 0xb9: cycles = this.cpdr(); break
+
+      // ── Block I/O: INI, IND, INIR, INDR ──────────────────────────
+      case 0xa2: this.ini(); cycles = 16; break
+      case 0xaa: this.ind(); cycles = 16; break
+      case 0xb2: cycles = this.inir(); break
+      case 0xba: cycles = this.indr(); break
+
+      // ── Block output: OUTI, OUTD, OTIR, OTDR ─────────────────────
+      case 0xa3: this.outi(); cycles = 16; break
+      case 0xab: this.outd(); cycles = 16; break
+      case 0xb3: cycles = this.otir(); break
+      case 0xbb: cycles = this.otdr(); break
+
+      // ── RLD / RRD ─────────────────────────────────────────────────
+      case 0x6f: this.rld(); cycles = 18; break
+      case 0x67: this.rrd(); cycles = 18; break
+
+      default:
+        cycles = 8  // NOP for unimplemented ED opcodes
+    }
+
+    return cycles
+  }
+
+  // ── ED helpers ────────────────────────────────────────────────────
+
+  private inC(): number {
+    const v = this.io.read(this.regs.BC) & 0xff
+    this.setSZF53(v)
+    this.setFlag(Flag.H,  false)
+    this.setFlag(Flag.N,  false)
+    this.setFlag(Flag.PV, PARITY_TABLE[v] ?? false)
+    return v
+  }
+
+  private sbcHL(rr: number): void {
+    const hl  = this.regs.HL
+    const c   = this.getFlag(Flag.C) ? 1 : 0
+    const res = hl - rr - c
+    this.regs.HL = res & 0xffff
+    this.setFlag(Flag.S,  (res & 0x8000) !== 0)
+    this.setFlag(Flag.Z,  (res & 0xffff) === 0)
+    this.setFlag(Flag.H,  ((hl & 0xfff) - (rr & 0xfff) - c) < 0)
+    this.setFlag(Flag.PV, ((hl ^ rr) & (hl ^ res) & 0x8000) !== 0)
+    this.setFlag(Flag.N,  true)
+    this.setFlag(Flag.C,  res < 0)
+    this.setFlag(Flag.F5, (this.regs.H & 0x20) !== 0)
+    this.setFlag(Flag.F3, (this.regs.H & 0x08) !== 0)
+  }
+
+  private adcHL(rr: number): void {
+    const hl  = this.regs.HL
+    const c   = this.getFlag(Flag.C) ? 1 : 0
+    const res = hl + rr + c
+    this.regs.HL = res & 0xffff
+    this.setFlag(Flag.S,  (res & 0x8000) !== 0)
+    this.setFlag(Flag.Z,  (res & 0xffff) === 0)
+    this.setFlag(Flag.H,  ((hl & 0xfff) + (rr & 0xfff) + c) > 0xfff)
+    this.setFlag(Flag.PV, (~(hl ^ rr) & (hl ^ res) & 0x8000) !== 0)
+    this.setFlag(Flag.N,  false)
+    this.setFlag(Flag.C,  res > 0xffff)
+    this.setFlag(Flag.F5, (this.regs.H & 0x20) !== 0)
+    this.setFlag(Flag.F3, (this.regs.H & 0x08) !== 0)
+  }
+
+  // LDI: (DE) ← (HL), HL++, DE++, BC--
+  private ldi(): void {
+    const v = this.rb(this.regs.HL)
+    this.wb(this.regs.DE, v)
+    this.regs.HL = (this.regs.HL + 1) & 0xffff
+    this.regs.DE = (this.regs.DE + 1) & 0xffff
+    this.regs.BC = (this.regs.BC - 1) & 0xffff
+    this.setFlag(Flag.H,  false)
+    this.setFlag(Flag.N,  false)
+    this.setFlag(Flag.PV, this.regs.BC !== 0)
+    const n = (v + this.regs.A) & 0xff
+    this.setFlag(Flag.F3, (n & 0x08) !== 0)
+    this.setFlag(Flag.F5, (n & 0x02) !== 0)
+  }
+
+  // LDD: (DE) ← (HL), HL--, DE--, BC--
+  private ldd(): void {
+    const v = this.rb(this.regs.HL)
+    this.wb(this.regs.DE, v)
+    this.regs.HL = (this.regs.HL - 1) & 0xffff
+    this.regs.DE = (this.regs.DE - 1) & 0xffff
+    this.regs.BC = (this.regs.BC - 1) & 0xffff
+    this.setFlag(Flag.H,  false)
+    this.setFlag(Flag.N,  false)
+    this.setFlag(Flag.PV, this.regs.BC !== 0)
+    const n = (v + this.regs.A) & 0xff
+    this.setFlag(Flag.F3, (n & 0x08) !== 0)
+    this.setFlag(Flag.F5, (n & 0x02) !== 0)
+  }
+
+  // LDIR: repeat LDI while BC≠0
+  private ldir(): number {
+    this.ldi()
+    if (this.regs.BC !== 0) {
+      this.regs.PC = (this.regs.PC - 2) & 0xffff  // repeat
+      return 21
+    }
+    return 16
+  }
+
+  // LDDR: repeat LDD while BC≠0
+  private lddr(): number {
+    this.ldd()
+    if (this.regs.BC !== 0) {
+      this.regs.PC = (this.regs.PC - 2) & 0xffff
+      return 21
+    }
+    return 16
+  }
+
+  // CPI: compare A with (HL), HL++, BC--
+  private cpi(): void {
+    const v = this.rb(this.regs.HL)
+    const r = (this.regs.A - v) & 0xff
+    this.regs.HL = (this.regs.HL + 1) & 0xffff
+    this.regs.BC = (this.regs.BC - 1) & 0xffff
+    this.setFlag(Flag.S,  (r & 0x80) !== 0)
+    this.setFlag(Flag.Z,  r === 0)
+    this.setFlag(Flag.H,  (this.regs.A & 0xf) < (v & 0xf))
+    this.setFlag(Flag.PV, this.regs.BC !== 0)
+    this.setFlag(Flag.N,  true)
+    const n = r - (this.getFlag(Flag.H) ? 1 : 0)
+    this.setFlag(Flag.F3, (n & 0x08) !== 0)
+    this.setFlag(Flag.F5, (n & 0x02) !== 0)
+  }
+
+  // CPD: compare A with (HL), HL--, BC--
+  private cpd(): void {
+    const v = this.rb(this.regs.HL)
+    const r = (this.regs.A - v) & 0xff
+    this.regs.HL = (this.regs.HL - 1) & 0xffff
+    this.regs.BC = (this.regs.BC - 1) & 0xffff
+    this.setFlag(Flag.S,  (r & 0x80) !== 0)
+    this.setFlag(Flag.Z,  r === 0)
+    this.setFlag(Flag.H,  (this.regs.A & 0xf) < (v & 0xf))
+    this.setFlag(Flag.PV, this.regs.BC !== 0)
+    this.setFlag(Flag.N,  true)
+    const n = r - (this.getFlag(Flag.H) ? 1 : 0)
+    this.setFlag(Flag.F3, (n & 0x08) !== 0)
+    this.setFlag(Flag.F5, (n & 0x02) !== 0)
+  }
+
+  private cpir(): number {
+    this.cpi()
+    if (this.regs.BC !== 0 && !this.getFlag(Flag.Z)) {
+      this.regs.PC = (this.regs.PC - 2) & 0xffff
+      return 21
+    }
+    return 16
+  }
+
+  private cpdr(): number {
+    this.cpd()
+    if (this.regs.BC !== 0 && !this.getFlag(Flag.Z)) {
+      this.regs.PC = (this.regs.PC - 2) & 0xffff
+      return 21
+    }
+    return 16
+  }
+
+  // INI: (HL) ← IN(BC), HL++, B--
+  private ini(): void {
+    const v = this.io.read(this.regs.BC) & 0xff
+    this.wb(this.regs.HL, v)
+    this.regs.HL = (this.regs.HL + 1) & 0xffff
+    this.regs.B  = (this.regs.B  - 1) & 0xff
+    this.setFlag(Flag.Z, this.regs.B === 0)
+    this.setFlag(Flag.N, true)
+  }
+
+  // IND: (HL) ← IN(BC), HL--, B--
+  private ind(): void {
+    const v = this.io.read(this.regs.BC) & 0xff
+    this.wb(this.regs.HL, v)
+    this.regs.HL = (this.regs.HL - 1) & 0xffff
+    this.regs.B  = (this.regs.B  - 1) & 0xff
+    this.setFlag(Flag.Z, this.regs.B === 0)
+    this.setFlag(Flag.N, true)
+  }
+
+  private inir(): number {
+    this.ini()
+    if (this.regs.B !== 0) { this.regs.PC = (this.regs.PC - 2) & 0xffff; return 21 }
+    return 16
+  }
+
+  private indr(): number {
+    this.ind()
+    if (this.regs.B !== 0) { this.regs.PC = (this.regs.PC - 2) & 0xffff; return 21 }
+    return 16
+  }
+
+  // OUTI: OUT(BC) ← (HL), HL++, B--
+  private outi(): void {
+    const v = this.rb(this.regs.HL)
+    this.regs.HL = (this.regs.HL + 1) & 0xffff
+    this.regs.B  = (this.regs.B  - 1) & 0xff
+    this.io.write(this.regs.BC, v)
+    this.setFlag(Flag.Z, this.regs.B === 0)
+    this.setFlag(Flag.N, true)
+  }
+
+  // OUTD: OUT(BC) ← (HL), HL--, B--
+  private outd(): void {
+    const v = this.rb(this.regs.HL)
+    this.regs.HL = (this.regs.HL - 1) & 0xffff
+    this.regs.B  = (this.regs.B  - 1) & 0xff
+    this.io.write(this.regs.BC, v)
+    this.setFlag(Flag.Z, this.regs.B === 0)
+    this.setFlag(Flag.N, true)
+  }
+
+  private otir(): number {
+    this.outi()
+    if (this.regs.B !== 0) { this.regs.PC = (this.regs.PC - 2) & 0xffff; return 21 }
+    return 16
+  }
+
+  private otdr(): number {
+    this.outd()
+    if (this.regs.B !== 0) { this.regs.PC = (this.regs.PC - 2) & 0xffff; return 21 }
+    return 16
+  }
+
+  // RLD: high nibble of (HL) ← low nibble of A; low nibble of A ← high nibble of (HL)
+  private rld(): void {
+    const m = this.rb(this.regs.HL)
+    const a = this.regs.A
+    this.wb(this.regs.HL, ((m << 4) | (a & 0xf)) & 0xff)
+    this.regs.A = (a & 0xf0) | (m >> 4)
+    this.setSZF53(this.regs.A)
+    this.setFlag(Flag.H,  false)
+    this.setFlag(Flag.N,  false)
+    this.setFlag(Flag.PV, PARITY_TABLE[this.regs.A] ?? false)
+  }
+
+  // RRD: low nibble of (HL) ← high nibble of A; high nibble of A ← low nibble of (HL)
+  private rrd(): void {
+    const m = this.rb(this.regs.HL)
+    const a = this.regs.A
+    this.wb(this.regs.HL, ((a << 4) | (m >> 4)) & 0xff)
+    this.regs.A = (a & 0xf0) | (m & 0xf)
+    this.setSZF53(this.regs.A)
+    this.setFlag(Flag.H,  false)
+    this.setFlag(Flag.N,  false)
+    this.setFlag(Flag.PV, PARITY_TABLE[this.regs.A] ?? false)
   }
 }
