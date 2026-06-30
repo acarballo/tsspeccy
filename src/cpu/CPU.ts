@@ -545,6 +545,12 @@ export class CPU {
       // ED prefix
       case 0xed: cycles = this.executeED(); break
 
+      // DD prefix (IX)
+      case 0xdd: cycles = this.executeXY(true); break
+
+      // FD prefix (IY)
+      case 0xfd: cycles = this.executeXY(false); break
+
       // CALL cc, nn
       case 0xc4: case 0xcc: case 0xd4: case 0xdc:
       case 0xe4: case 0xec: case 0xf4: case 0xfc: {
@@ -660,6 +666,54 @@ export class CPU {
     this.push(this.regs.PC)
     this.regs.PC = 0x0066
     this.tStates += 11
+  }
+
+  /**
+   * Trigger a Maskable Interrupt (INT).
+   * The ZX Spectrum ULA pulses /INT 50 times a second (once per frame).
+   * Only has effect if IFF1 is enabled (interrupts not disabled via DI).
+   *
+   * dataBusValue is only relevant for IM 2 (used to form the vector
+   * address). The Spectrum's ULA always puts 0xFF on the data bus,
+   * which combined with the I register gives the IM2 vector table
+   * entry — this is how games install custom interrupt routines.
+   *
+   * Returns the number of T-states consumed (0 if interrupt was masked).
+   */
+  interrupt(dataBusValue = 0xff): number {
+    if (!this.regs.IFF1) return 0
+
+    this.halted = false
+    this.regs.IFF1 = false
+    this.regs.IFF2 = false
+
+    switch (this.regs.IM) {
+      case 0:
+        // IM 0: execute instruction on data bus — in practice always RST 38h
+        this.push(this.regs.PC)
+        this.regs.PC = 0x0038
+        this.tStates += 13
+        return 13
+
+      case 1:
+        // IM 1: always RST 38h
+        this.push(this.regs.PC)
+        this.regs.PC = 0x0038
+        this.tStates += 13
+        return 13
+
+      case 2: {
+        // IM 2: vector = (I << 8) | dataBusValue, then jump to address stored there
+        const vectorAddr = ((this.regs.I << 8) | (dataBusValue & 0xff)) & 0xffff
+        this.push(this.regs.PC)
+        this.regs.PC = this.rw(vectorAddr)
+        this.tStates += 19
+        return 19
+      }
+
+      default:
+        return 0
+    }
   }
 
   // ─────────────────────────────────────────────────────────────────
@@ -1017,5 +1071,220 @@ export class CPU {
     this.setFlag(Flag.H,  false)
     this.setFlag(Flag.N,  false)
     this.setFlag(Flag.PV, PARITY_TABLE[this.regs.A] ?? false)
+  }
+
+  // ─────────────────────────────────────────────────────────────────
+  // DD/FD prefix: IX and IY instructions
+  //
+  // Most DD/FD opcodes are identical to the unprefixed version but
+  // substitute HL → IX (DD) or IY (FD), and add a signed 8-bit
+  // displacement for (IX+d) / (IY+d) indirect accesses.
+  //
+  // useIX=true  → DD prefix → use IX
+  // useIX=false → FD prefix → use IY
+  // ─────────────────────────────────────────────────────────────────
+  private executeXY(useIX: boolean): number {
+    const op = this.fetch()
+
+    // Helpers to read/write the active index register
+    const getXY  = (): number           => useIX ? this.regs.IX : this.regs.IY
+    const setXY  = (v: number): void    => { if (useIX) this.regs.IX = v & 0xffff; else this.regs.IY = v & 0xffff }
+    const getXYH = (): number           => (getXY() >> 8) & 0xff
+    const getXYL = (): number           => getXY() & 0xff
+    const setXYH = (v: number): void    => setXY((getXY() & 0x00ff) | ((v & 0xff) << 8))
+    const setXYL = (v: number): void    => setXY((getXY() & 0xff00) | (v & 0xff))
+
+    // Read signed displacement and compute effective address
+    const disp   = (): number => {
+      const d = this.fetch()
+      return (getXY() + (d < 0x80 ? d : d - 256)) & 0xffff
+    }
+
+    let cycles = 8
+
+    switch (op) {
+      // ── LD XY, nn ─────────────────────────────────────────────────
+      case 0x21: setXY(this.rw(this.regs.PC)); this.regs.PC = (this.regs.PC+2)&0xffff; cycles=14; break
+
+      // ── LD (nn), XY / LD XY, (nn) ────────────────────────────────
+      case 0x22: { const nn=this.rw(this.regs.PC); this.regs.PC=(this.regs.PC+2)&0xffff; this.ww(nn,getXY()); cycles=20; break }
+      case 0x2a: { const nn=this.rw(this.regs.PC); this.regs.PC=(this.regs.PC+2)&0xffff; setXY(this.rw(nn)); cycles=20; break }
+
+      // ── LD SP, XY ─────────────────────────────────────────────────
+      case 0xf9: this.regs.SP = getXY(); cycles=10; break
+
+      // ── INC/DEC XY ────────────────────────────────────────────────
+      case 0x23: setXY((getXY()+1)&0xffff); cycles=10; break
+      case 0x2b: setXY((getXY()-1)&0xffff); cycles=10; break
+
+      // ── INC/DEC XYH, XYL ──────────────────────────────────────────
+      case 0x24: setXYH(this.aluInc(getXYH())); cycles=8; break
+      case 0x2c: setXYL(this.aluInc(getXYL())); cycles=8; break
+      case 0x25: setXYH(this.aluDec(getXYH())); cycles=8; break
+      case 0x2d: setXYL(this.aluDec(getXYL())); cycles=8; break
+
+      // ── LD XYH/XYL, n ─────────────────────────────────────────────
+      case 0x26: setXYH(this.fetch()); cycles=11; break
+      case 0x2e: setXYL(this.fetch()); cycles=11; break
+
+      // ── LD XYH/XYL, r ─────────────────────────────────────────────
+      case 0x60: setXYH(this.regs.B); cycles=8; break
+      case 0x61: setXYH(this.regs.C); cycles=8; break
+      case 0x62: setXYH(this.regs.D); cycles=8; break
+      case 0x63: setXYH(this.regs.E); cycles=8; break
+      case 0x64: setXYH(getXYH()); cycles=8; break
+      case 0x65: setXYH(getXYL()); cycles=8; break
+      case 0x67: setXYH(this.regs.A); cycles=8; break
+      case 0x68: setXYL(this.regs.B); cycles=8; break
+      case 0x69: setXYL(this.regs.C); cycles=8; break
+      case 0x6a: setXYL(this.regs.D); cycles=8; break
+      case 0x6b: setXYL(this.regs.E); cycles=8; break
+      case 0x6c: setXYL(getXYH()); cycles=8; break
+      case 0x6d: setXYL(getXYL()); cycles=8; break
+      case 0x6f: setXYL(this.regs.A); cycles=8; break
+
+      // ── LD r, XYH/XYL ─────────────────────────────────────────────
+      case 0x44: this.regs.B=getXYH(); cycles=8; break
+      case 0x45: this.regs.C=getXYL(); cycles=8; break  // note: swapped
+      case 0x4c: this.regs.C=getXYH(); cycles=8; break
+      case 0x4d: this.regs.C=getXYL(); cycles=8; break
+      case 0x54: this.regs.D=getXYH(); cycles=8; break
+      case 0x55: this.regs.D=getXYL(); cycles=8; break  // note: swapped
+      case 0x5c: this.regs.E=getXYH(); cycles=8; break
+      case 0x5d: this.regs.E=getXYL(); cycles=8; break
+      case 0x7c: this.regs.A=getXYH(); cycles=8; break
+      case 0x7d: this.regs.A=getXYL(); cycles=8; break
+
+      // ── ADD HL(→XY), rr ───────────────────────────────────────────
+      case 0x09: { const r=this.regs.BC; const xy=getXY(); const res=xy+r; setXY(res&0xffff); this.setFlag(Flag.C,res>0xffff); this.setFlag(Flag.N,false); this.setFlag(Flag.H,((xy&0xfff)+(r&0xfff))>0xfff); cycles=15; break }
+      case 0x19: { const r=this.regs.DE; const xy=getXY(); const res=xy+r; setXY(res&0xffff); this.setFlag(Flag.C,res>0xffff); this.setFlag(Flag.N,false); this.setFlag(Flag.H,((xy&0xfff)+(r&0xfff))>0xfff); cycles=15; break }
+      case 0x29: { const r=getXY();      const xy=getXY(); const res=xy+r; setXY(res&0xffff); this.setFlag(Flag.C,res>0xffff); this.setFlag(Flag.N,false); this.setFlag(Flag.H,((xy&0xfff)+(r&0xfff))>0xfff); cycles=15; break }
+      case 0x39: { const r=this.regs.SP; const xy=getXY(); const res=xy+r; setXY(res&0xffff); this.setFlag(Flag.C,res>0xffff); this.setFlag(Flag.N,false); this.setFlag(Flag.H,((xy&0xfff)+(r&0xfff))>0xfff); cycles=15; break }
+
+      // ── INC/DEC (XY+d) ────────────────────────────────────────────
+      case 0x34: { const ea=disp(); this.wb(ea,this.aluInc(this.rb(ea))); cycles=23; break }
+      case 0x35: { const ea=disp(); this.wb(ea,this.aluDec(this.rb(ea))); cycles=23; break }
+
+      // ── LD (XY+d), n ──────────────────────────────────────────────
+      case 0x36: { const ea=disp(); this.wb(ea,this.fetch()); cycles=19; break }
+
+      // ── LD (XY+d), r ──────────────────────────────────────────────
+      case 0x70: { const ea=disp(); this.wb(ea,this.regs.B); cycles=19; break }
+      case 0x71: { const ea=disp(); this.wb(ea,this.regs.C); cycles=19; break }
+      case 0x72: { const ea=disp(); this.wb(ea,this.regs.D); cycles=19; break }
+      case 0x73: { const ea=disp(); this.wb(ea,this.regs.E); cycles=19; break }
+      case 0x74: { const ea=disp(); this.wb(ea,this.regs.H); cycles=19; break }
+      case 0x75: { const ea=disp(); this.wb(ea,this.regs.L); cycles=19; break }
+      case 0x77: { const ea=disp(); this.wb(ea,this.regs.A); cycles=19; break }
+
+      // ── LD r, (XY+d) ──────────────────────────────────────────────
+      case 0x46: { this.regs.B=this.rb(disp()); cycles=19; break }
+      case 0x4e: { this.regs.C=this.rb(disp()); cycles=19; break }
+      case 0x56: { this.regs.D=this.rb(disp()); cycles=19; break }
+      case 0x5e: { this.regs.E=this.rb(disp()); cycles=19; break }
+      case 0x66: { this.regs.H=this.rb(disp()); cycles=19; break }
+      case 0x6e: { this.regs.L=this.rb(disp()); cycles=19; break }
+      case 0x7e: { this.regs.A=this.rb(disp()); cycles=19; break }
+
+      // ── ALU A, (XY+d) ─────────────────────────────────────────────
+      case 0x86: { this.aluAdd(this.rb(disp()));          cycles=19; break }
+      case 0x8e: { this.aluAdd(this.rb(disp()),true);     cycles=19; break }
+      case 0x96: { this.aluSub(this.rb(disp()));          cycles=19; break }
+      case 0x9e: { this.aluSub(this.rb(disp()),true);     cycles=19; break }
+      case 0xa6: { this.aluAnd(this.rb(disp()));          cycles=19; break }
+      case 0xae: { this.aluXor(this.rb(disp()));          cycles=19; break }
+      case 0xb6: { this.aluOr(this.rb(disp()));           cycles=19; break }
+      case 0xbe: { this.aluSub(this.rb(disp()),false,false); cycles=19; break }
+
+      // ── ALU A, XYH/XYL ────────────────────────────────────────────
+      case 0x84: { this.aluAdd(getXYH());           cycles=8; break }
+      case 0x85: { this.aluAdd(getXYL());           cycles=8; break }
+      case 0x8c: { this.aluAdd(getXYH(),true);      cycles=8; break }
+      case 0x8d: { this.aluAdd(getXYL(),true);      cycles=8; break }
+      case 0x94: { this.aluSub(getXYH());           cycles=8; break }
+      case 0x95: { this.aluSub(getXYL());           cycles=8; break }
+      case 0x9c: { this.aluSub(getXYH(),true);      cycles=8; break }
+      case 0x9d: { this.aluSub(getXYL(),true);      cycles=8; break }
+      case 0xa4: { this.aluAnd(getXYH());           cycles=8; break }
+      case 0xa5: { this.aluAnd(getXYL());           cycles=8; break }
+      case 0xac: { this.aluXor(getXYH());           cycles=8; break }
+      case 0xad: { this.aluXor(getXYL());           cycles=8; break }
+      case 0xb4: { this.aluOr(getXYH());            cycles=8; break }
+      case 0xb5: { this.aluOr(getXYL());            cycles=8; break }
+      case 0xbc: { this.aluSub(getXYH(),false,false); cycles=8; break }
+      case 0xbd: { this.aluSub(getXYL(),false,false); cycles=8; break }
+
+      // ── PUSH/POP XY ───────────────────────────────────────────────
+      case 0xe5: { this.push(getXY()); cycles=15; break }
+      case 0xe1: { setXY(this.pop()); cycles=14; break }
+
+      // ── EX (SP), XY ───────────────────────────────────────────────
+      case 0xe3: { const tmp=this.rw(this.regs.SP); this.ww(this.regs.SP,getXY()); setXY(tmp); cycles=23; break }
+
+      // ── JP (XY) ───────────────────────────────────────────────────
+      case 0xe9: { this.regs.PC=getXY(); cycles=8; break }
+
+      // ── DDCB / FDCB: bit ops on (XY+d) ───────────────────────────
+      case 0xcb: { cycles = this.executeXYCB(useIX); break }
+
+      default:
+        // Unknown DD/FD opcode — treat prefix as NOP, re-execute op
+        // (This matches real Z80 behaviour for some undefined opcodes)
+        cycles = 4
+    }
+
+    return cycles
+  }
+
+  // ── DDCB / FDCB: bit operations on (IX+d) / (IY+d) ──────────────
+  private executeXYCB(useIX: boolean): number {
+    const d   = this.fetch()
+    const disp = (useIX ? this.regs.IX : this.regs.IY) + (d < 0x80 ? d : d - 256)
+    const ea  = disp & 0xffff
+    const op  = this.fetch()  // actual opcode after displacement
+
+    let v = this.rb(ea)
+    const bit = (op >> 3) & 0x07
+
+    if (op < 0x40) {
+      // Rotates / shifts on (XY+d)
+      let c: boolean
+      switch ((op >> 3) & 0x07) {
+        case 0: c=(v&0x80)!==0; v=((v<<1)|(c?1:0))&0xff; this.setFlag(Flag.C,c); break  // RLC
+        case 1: c=(v&0x01)!==0; v=((v>>1)|(c?0x80:0))&0xff; this.setFlag(Flag.C,c); break  // RRC
+        case 2: c=(v&0x80)!==0; v=((v<<1)|(this.getFlag(Flag.C)?1:0))&0xff; this.setFlag(Flag.C,c); break  // RL
+        case 3: c=(v&0x01)!==0; v=((v>>1)|(this.getFlag(Flag.C)?0x80:0))&0xff; this.setFlag(Flag.C,c); break  // RR
+        case 4: c=(v&0x80)!==0; v=(v<<1)&0xff; this.setFlag(Flag.C,c); break  // SLA
+        case 5: c=(v&0x01)!==0; v=((v>>1)|(v&0x80))&0xff; this.setFlag(Flag.C,c); break  // SRA
+        case 6: c=(v&0x80)!==0; v=((v<<1)|1)&0xff; this.setFlag(Flag.C,c); break  // SLL
+        case 7: c=(v&0x01)!==0; v=(v>>1)&0xff; this.setFlag(Flag.C,c); break  // SRL
+      }
+      this.setFlag(Flag.N,false); this.setFlag(Flag.H,false)
+      this.setSZF53(v); this.setFlag(Flag.PV, PARITY_TABLE[v]??false)
+      this.wb(ea, v)
+      // Copy result to register if lower 3 bits ≠ 6
+      const reg = op & 0x07
+      if (reg !== 6) this.setReg(reg, v)
+    } else if (op < 0x80) {
+      // BIT b, (XY+d)
+      this.setFlag(Flag.Z,  (v & (1<<bit))===0)
+      this.setFlag(Flag.N,  false)
+      this.setFlag(Flag.H,  true)
+      this.setFlag(Flag.PV, (v & (1<<bit))===0)
+    } else if (op < 0xc0) {
+      // RES b, (XY+d)
+      v &= ~(1<<bit) & 0xff
+      this.wb(ea, v)
+      const reg = op & 0x07
+      if (reg !== 6) this.setReg(reg, v)
+    } else {
+      // SET b, (XY+d)
+      v |= (1<<bit) & 0xff
+      this.wb(ea, v)
+      const reg = op & 0x07
+      if (reg !== 6) this.setReg(reg, v)
+    }
+
+    return 23
   }
 }
