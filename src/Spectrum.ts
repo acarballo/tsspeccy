@@ -34,6 +34,9 @@ export class Spectrum {
   loadROM(rom: Uint8Array): void {
     this.mem.loadROM(rom)
     this.cpu.regs.PC = 0x0000
+    // Skip the ROM's RAM test (~22 frames of black screen) so the
+    // browser goes straight to the BASIC editor on first Start.
+    this.loop.fastBoot()
   }
 
   start(): void  { this.loop.start() }

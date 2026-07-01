@@ -28,6 +28,24 @@ export class FrameLoop {
     private readonly renderer: Renderer,
   ) {}
 
+  /**
+   * Fast-boot: execute up to maxFrames of CPU time without rendering,
+   * stopping early once the ROM has finished init (IFF1 enabled = EI executed).
+   * This skips the ~1.5s black screen during RAM test.
+   */
+  fastBoot(maxFrames = 150): void {
+    for (let f = 0; f < maxFrames; f++) {
+      this.cpu.interrupt()
+      let t = 0
+      while (t < TSTATES_PER_FRAME) t += this.cpu.step()
+      // ROM enables interrupts (EI / IM 1) just before entering the BASIC editor
+      if (this.cpu.regs.IFF1 && this.cpu.regs.IM === 1) break
+    }
+    // Render the first real frame immediately
+    this.ula.renderFrame()
+    this.renderer.drawFrame()
+  }
+
   start(): void {
     if (this.running) return
     this.running = true
@@ -43,6 +61,11 @@ export class FrameLoop {
 
   private tick = (): void => {
     if (!this.running) return
+
+    // Trigger the 50Hz maskable interrupt at the start of the frame
+    // (this is what the ULA does in real hardware — it pulses /INT
+    // for ~32 T-states at the start of each frame)
+    this.cpu.interrupt()
 
     // Run Z80 for one frame worth of T-states
     let tStates = 0
