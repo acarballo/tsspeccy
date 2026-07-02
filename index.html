@@ -64,6 +64,8 @@
     button:hover:not(:disabled) { background: #3a3a3a; border-color: #888; }
     button:disabled { opacity: .35; cursor: not-allowed; }
     button.primary  { border-color: #00d7d7; color: #00d7d7; }
+    button.accent   { border-color: #00d75f; color: #00d75f; }
+    button.accent:hover:not(:disabled) { background: #00d75f18; }
     button.primary:hover:not(:disabled) { background: #00d7d718; }
 
     .status-bar { font-size: .76rem; color: #888; min-height: 1.2em; }
@@ -113,6 +115,7 @@
 
   <div class="controls">
     <button id="btn-load"  class="primary">📂 Load ROM</button>
+    <button id="btn-snap"  class="accent" disabled>🎮 Load Snapshot</button>
     <button id="btn-start" disabled>▶ Start</button>
     <button id="btn-stop"  disabled>⏹ Stop</button>
     <button id="btn-reset" disabled>↺ Reset</button>
@@ -183,7 +186,8 @@
 
   <footer>ZX Spectrum 48K emulator · TypeScript + Canvas</footer>
 
-  <input type="file" id="rom-input" accept=".rom,.bin" style="display:none" />
+  <input type="file" id="rom-input"  accept=".rom,.bin"      style="display:none" />
+  <input type="file" id="snap-input" accept=".z80,.sna,.Z80,.SNA" style="display:none" />
   <script type="module" src="/src/main.ts"></script>
 </body>
 </html>

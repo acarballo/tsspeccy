@@ -68,6 +68,11 @@ export class ULA {
     return this.borderColour
   }
 
+  /** Directly set border colour — used by snapshot loaders */
+  setBorderColour(colour: number): void {
+    this.borderColour = colour & 0x07
+  }
+
   // ─────────────────────────────────────────────────────────────────
   // Bitmap address decoder
   //

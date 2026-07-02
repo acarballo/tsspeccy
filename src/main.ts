@@ -3,18 +3,23 @@
  */
 import { Spectrum } from './Spectrum.js'
 
-const canvas   = document.getElementById('screen')   as HTMLCanvasElement
-const btnLoad  = document.getElementById('btn-load')  as HTMLButtonElement
-const btnStart = document.getElementById('btn-start') as HTMLButtonElement
-const btnStop  = document.getElementById('btn-stop')  as HTMLButtonElement
-const btnReset = document.getElementById('btn-reset') as HTMLButtonElement
-const fileInput = document.getElementById('rom-input') as HTMLInputElement
-const statusEl  = document.getElementById('status')   as HTMLSpanElement
+const canvas    = document.getElementById('screen')    as HTMLCanvasElement
+const btnLoad   = document.getElementById('btn-load')   as HTMLButtonElement
+const btnSnap   = document.getElementById('btn-snap')   as HTMLButtonElement
+const btnStart  = document.getElementById('btn-start')  as HTMLButtonElement
+const btnStop   = document.getElementById('btn-stop')   as HTMLButtonElement
+const btnReset  = document.getElementById('btn-reset')  as HTMLButtonElement
+const romInput  = document.getElementById('rom-input')  as HTMLInputElement
+const snapInput = document.getElementById('snap-input') as HTMLInputElement
+const statusEl  = document.getElementById('status')     as HTMLSpanElement
+const screenWrap = document.getElementById('screen-wrap')!
 
 const spectrum = new Spectrum(canvas)
+let romLoaded = false
 
-function setStatus(msg: string): void {
+function setStatus(msg: string, colour = '#888'): void {
   statusEl.textContent = msg
+  statusEl.style.color = colour
 }
 
 // ── ROM loading ────────────────────────────────────────────────────
@@ -23,23 +28,54 @@ async function loadROM(file: File): Promise<void> {
   try {
     const buf = await file.arrayBuffer()
     spectrum.loadROM(new Uint8Array(buf))
-    setStatus(`ROM loaded: ${file.name} (${buf.byteLength} bytes) — click Start`)
-    btnStart.disabled = false
-    btnReset.disabled = false
+    romLoaded = true
+    setStatus(`ROM: ${file.name} (${buf.byteLength} bytes) — ready`, '#00d7d7')
+    btnStart.disabled  = false
+    btnSnap.disabled   = false
+    btnReset.disabled  = false
   } catch (e) {
-    setStatus(`Error loading ROM: ${e}`)
+    setStatus(`ROM error: ${e}`, '#d75f5f')
   }
 }
 
-btnLoad.addEventListener('click', () => fileInput.click())
-fileInput.addEventListener('change', () => {
-  const file = fileInput.files?.[0]
-  if (file) loadROM(file)
+// ── Snapshot loading ───────────────────────────────────────────────
+
+async function loadSnapshot(file: File): Promise<void> {
+  if (!romLoaded) {
+    setStatus('Load a ROM first before loading a snapshot.', '#d7af00')
+    return
+  }
+  try {
+    const buf  = await file.arrayBuffer()
+    const wasRunning = spectrum.isRunning()
+    spectrum.loadSnapshot(new Uint8Array(buf), file.name)
+    setStatus(`Snapshot: ${file.name} loaded`, '#00d75f')
+    btnStart.disabled = false
+    btnStop.disabled  = false
+    if (!wasRunning) {
+      spectrum.start()
+      btnStart.disabled = true
+      btnStop.disabled  = false
+    }
+  } catch (e) {
+    setStatus(`Snapshot error: ${e}`, '#d75f5f')
+  }
+}
+
+// ── File pickers ───────────────────────────────────────────────────
+
+btnLoad.addEventListener('click', () => romInput.click())
+romInput.addEventListener('change', () => {
+  const f = romInput.files?.[0]; if (f) loadROM(f)
 })
 
-// ── Drag and drop ──────────────────────────────────────────────────
+btnSnap.addEventListener('click', () => snapInput.click())
+snapInput.addEventListener('change', () => {
+  const f = snapInput.files?.[0]; if (f) loadSnapshot(f)
+})
 
-const screenWrap = document.getElementById('screen-wrap')!
+// ── Drag and drop — detect ROM vs snapshot by extension ───────────
+
 screenWrap.addEventListener('dragover', e => {
   e.preventDefault()
   screenWrap.classList.add('drag-over')
@@ -49,14 +85,22 @@ screenWrap.addEventListener('drop', e => {
   e.preventDefault()
   screenWrap.classList.remove('drag-over')
   const file = e.dataTransfer?.files[0]
-  if (file) loadROM(file)
+  if (!file) return
+  const ext = file.name.split('.').pop()?.toLowerCase()
+  if (ext === 'rom' || ext === 'bin') {
+    loadROM(file)
+  } else if (ext === 'z80' || ext === 'sna') {
+    loadSnapshot(file)
+  } else {
+    setStatus(`Unknown file type: .${ext}`, '#d7af00')
+  }
 })
 
 // ── Controls ───────────────────────────────────────────────────────
 
 btnStart.addEventListener('click', () => {
   spectrum.start()
-  setStatus('Running…')
+  setStatus('Running…', '#888')
   btnStart.disabled = true
   btnStop.disabled  = false
   canvas.focus()
@@ -64,47 +108,39 @@ btnStart.addEventListener('click', () => {
 
 btnStop.addEventListener('click', () => {
   spectrum.stop()
-  setStatus('Stopped.')
+  setStatus('Stopped.', '#888')
   btnStart.disabled = false
   btnStop.disabled  = true
 })
 
 btnReset.addEventListener('click', () => {
   spectrum.reset()
-  setStatus('Reset — running…')
+  setStatus('Reset — running…', '#888')
   btnStart.disabled = true
   btnStop.disabled  = false
   canvas.focus()
 })
 
 // ── Keyboard ───────────────────────────────────────────────────────
-// Canvas must be focusable to receive key events
 
 canvas.setAttribute('tabindex', '0')
 
 canvas.addEventListener('keydown', e => {
-  // Prevent browser shortcuts (F5, arrows, space scrolling…)
-  const blocked = ['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight',
+  const blocked = ['Space','ArrowUp','ArrowDown','ArrowLeft','ArrowRight',
                    'F1','F2','F3','F4','F5','F6','F7','F8','F9','F10','F11','F12']
   if (blocked.includes(e.code)) e.preventDefault()
-
   spectrum.keyboard.keyDown(e.code)
 })
+canvas.addEventListener('keyup',  e => spectrum.keyboard.keyUp(e.code))
+canvas.addEventListener('click',  () => canvas.focus())
 
-canvas.addEventListener('keyup', e => {
-  spectrum.keyboard.keyUp(e.code)
-})
-
-// Re-focus canvas on click so keys work immediately
-canvas.addEventListener('click', () => canvas.focus())
-
-// ── Keyboard help overlay ──────────────────────────────────────────
+// ── Keyboard help ──────────────────────────────────────────────────
 
 const helpEl = document.getElementById('kbd-help')
 document.getElementById('btn-help')?.addEventListener('click', () => {
-  if (helpEl) helpEl.classList.toggle('hidden')
+  helpEl?.classList.toggle('hidden')
 })
 
 // ── Init ──────────────────────────────────────────────────────────
 
-setStatus('Load a .rom file to begin.')
+setStatus('Drop a .rom file or use Load ROM to begin.')
