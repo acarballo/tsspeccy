@@ -1,47 +1,38 @@
-import { CPU } from '../cpu/CPU.js'
+import { CPU }                    from '../cpu/CPU.js'
 import { ULA, TSTATES_PER_FRAME } from './ULA.js'
-import { Renderer } from './Renderer.js'
+import { Renderer }               from './Renderer.js'
+import { Beeper }                 from '../audio/Beeper.js'
+import { IOBus }                  from '../io/IOBus.js'
 
 /**
  * FrameLoop
  *
  * Runs the emulator at ~50 Hz using requestAnimationFrame.
- * Each frame:
- *   1. Execute Z80 instructions until TSTATES_PER_FRAME T-states consumed
- *   2. Render ULA frame
- *   3. Blit to canvas
- *   4. Schedule next frame
- *
- * Usage:
- *   const loop = new FrameLoop(cpu, ula, renderer)
- *   loop.start()
- *   // later:
- *   loop.stop()
+ * Each tick:
+ *   1. Fire maskable INT (ULA pulses /INT once per frame)
+ *   2. Execute Z80 for TSTATES_PER_FRAME T-states, updating IOBus.currentTstate
+ *   3. Notify Beeper that the frame ended
+ *   4. Render ULA frame → canvas
  */
 export class FrameLoop {
-  private running  = false
-  private rafId    = 0
+  private running = false
+  private rafId   = 0
 
   constructor(
-    private readonly cpu: CPU,
-    private readonly ula: ULA,
+    private readonly cpu:      CPU,
+    private readonly ula:      ULA,
     private readonly renderer: Renderer,
+    private readonly beeper:   Beeper,
+    private readonly io:       IOBus,
   ) {}
 
-  /**
-   * Fast-boot: execute up to maxFrames of CPU time without rendering,
-   * stopping early once the ROM has finished init (IFF1 enabled = EI executed).
-   * This skips the ~1.5s black screen during RAM test.
-   */
   fastBoot(maxFrames = 150): void {
     for (let f = 0; f < maxFrames; f++) {
       this.cpu.interrupt()
       let t = 0
       while (t < TSTATES_PER_FRAME) t += this.cpu.step()
-      // ROM enables interrupts (EI / IM 1) just before entering the BASIC editor
       if (this.cpu.regs.IFF1 && this.cpu.regs.IM === 1) break
     }
-    // Render the first real frame immediately
     this.ula.renderFrame()
     this.renderer.drawFrame()
   }
@@ -49,12 +40,14 @@ export class FrameLoop {
   start(): void {
     if (this.running) return
     this.running = true
+    this.beeper.start()
     this.tick()
   }
 
   stop(): void {
     this.running = false
     cancelAnimationFrame(this.rafId)
+    this.beeper.stop()
   }
 
   isRunning(): boolean { return this.running }
@@ -62,18 +55,21 @@ export class FrameLoop {
   private tick = (): void => {
     if (!this.running) return
 
-    // Trigger the 50Hz maskable interrupt at the start of the frame
-    // (this is what the ULA does in real hardware — it pulses /INT
-    // for ~32 T-states at the start of each frame)
     this.cpu.interrupt()
 
-    // Run Z80 for one frame worth of T-states
+    // Resume AudioContext after first user gesture (browsers require this)
+    this.beeper.resume()
+
+    // Execute one frame, updating IOBus.currentTstate so Beeper
+    // knows exactly when each port write happened within the frame
     let tStates = 0
     while (tStates < TSTATES_PER_FRAME) {
+      this.io.currentTstate = tStates
       tStates += this.cpu.step()
     }
 
-    // Render
+    this.beeper.endFrame(tStates)
+
     this.ula.renderFrame()
     this.renderer.drawFrame()
 
