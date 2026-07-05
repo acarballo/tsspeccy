@@ -1,7 +1,8 @@
 /**
  * main.ts — browser entry point
  */
-import { Spectrum } from './Spectrum.js'
+import { Spectrum }    from './Spectrum.js'
+import { DebugPanel } from './debugger/DebugPanel.js'
 
 const canvas    = document.getElementById('screen')    as HTMLCanvasElement
 const btnLoad   = document.getElementById('btn-load')   as HTMLButtonElement
@@ -139,6 +140,32 @@ canvas.addEventListener('click',  () => canvas.focus())
 const helpEl = document.getElementById('kbd-help')
 document.getElementById('btn-help')?.addEventListener('click', () => {
   helpEl?.classList.toggle('hidden')
+})
+
+// ── Debug panel ────────────────────────────────────────────────────
+
+const dbgContainer = document.getElementById('dbg-container')!
+const dbg = new DebugPanel(spectrum.cpu, spectrum.mem, dbgContainer)
+
+dbg.onPause  = () => {
+  spectrum.stop()
+  setStatus('Paused (debug)', '#d7af00')
+  btnStart.disabled = false
+  btnStop.disabled  = true
+}
+dbg.onResume = () => {
+  spectrum.start()
+  setStatus('Running…', '#888')
+  btnStart.disabled = true
+  btnStop.disabled  = false
+}
+dbg.onStep = () => {
+  spectrum.cpu.step()
+  dbg.refresh()
+}
+
+document.getElementById('btn-debug')?.addEventListener('click', () => {
+  dbg.toggle()
 })
 
 // ── Init ──────────────────────────────────────────────────────────
