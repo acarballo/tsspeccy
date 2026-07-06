@@ -23,7 +23,8 @@ describe('Maskable interrupt (INT) — IM 1', () => {
 
   it('jumps to 0x0038 in IM 1 when IFF1 is true', () => {
     const { cpu } = makeSystem([0xfb, 0x00, 0x00])  // EI, NOP, NOP
-    cpu.step()  // EI
+    cpu.step()  // EI  → eiPending=true
+    cpu.step()  // NOP → IFF1 now true (delay resolved)
     cpu.regs.IM = 1
     cpu.regs.PC = 0x1234
     const t = cpu.interrupt()
@@ -32,8 +33,9 @@ describe('Maskable interrupt (INT) — IM 1', () => {
   })
 
   it('pushes return address onto the stack', () => {
-    const { cpu } = makeSystem([0xfb])
-    cpu.step()
+    const { cpu } = makeSystem([0xfb, 0x00])  // EI, NOP
+    cpu.step()  // EI
+    cpu.step()  // NOP → IFF1 active
     cpu.regs.IM = 1
     cpu.regs.PC = 0x5555
     cpu.regs.SP = 0x8000
@@ -64,8 +66,9 @@ describe('Maskable interrupt (INT) — IM 1', () => {
 
 describe('Maskable interrupt — IM 2 (vector table)', () => {
   it('reads vector address from (I<<8)|dataBus and jumps there', () => {
-    const { cpu, mem } = makeSystem([0xfb])
+    const { cpu, mem } = makeSystem([0xfb, 0x00])  // EI, NOP
     cpu.step()  // EI
+    cpu.step()  // NOP → IFF1 active
     cpu.regs.IM = 2
     cpu.regs.I  = 0x40
     // Vector table entry at (0x40 << 8) | 0xFF = 0x40FF

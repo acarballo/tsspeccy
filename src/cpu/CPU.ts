@@ -26,6 +26,12 @@ export class CPU {
   halted = false
   tStates = 0  // total T-states elapsed
 
+  /**
+   * EI delay: the Z80 does not accept maskable interrupts until the
+   * instruction AFTER EI completes. This flag tracks that one-step delay.
+   */
+  private eiPending = false
+
   private readonly io: IIOBus
 
   constructor(private readonly mem: Memory, ioBus?: IIOBus) {
@@ -299,6 +305,7 @@ export class CPU {
 
   private executeCB(): number {
     const op = this.fetch()
+    this.regs.R = (this.regs.R & 0x80) | ((this.regs.R + 1) & 0x7f)
     const reg = op & 0x07
     const bit = (op >> 3) & 0x07
     let v = this.getReg(reg)
@@ -359,7 +366,19 @@ export class CPU {
   step(): number {
     if (this.halted) return 4
 
+    // EI delay: enable interrupts NOW (one instruction after EI executed)
+    if (this.eiPending) {
+      this.eiPending    = false
+      this.regs.IFF1    = true
+      this.regs.IFF2    = true
+    }
+
     const op = this.fetch()
+
+    // R register: incremented on every M1 cycle (opcode fetch).
+    // Only bits 0-6 wrap; bit 7 is preserved.
+    this.regs.R = (this.regs.R & 0x80) | ((this.regs.R + 1) & 0x7f)
+
     let cycles = 4
 
     switch (op) {
@@ -605,8 +624,8 @@ export class CPU {
       case 0xf9: this.regs.SP = this.regs.HL; cycles = 6; break
 
       // DI / EI
-      case 0xf3: this.regs.IFF1 = false; this.regs.IFF2 = false; cycles = 4; break
-      case 0xfb: this.regs.IFF1 = true;  this.regs.IFF2 = true;  cycles = 4; break
+      case 0xf3: this.regs.IFF1 = false; this.regs.IFF2 = false; this.eiPending = false; cycles = 4; break
+      case 0xfb: this.eiPending = true; cycles = 4; break  // EI — delay one instruction
 
       // EXX
       case 0xd9: this.regs.exx(); cycles = 4; break
@@ -722,6 +741,7 @@ export class CPU {
   // ─────────────────────────────────────────────────────────────────
   private executeED(): number {
     const op = this.fetch()
+    this.regs.R = (this.regs.R & 0x80) | ((this.regs.R + 1) & 0x7f)
     let cycles = 8
 
     switch (op) {
@@ -1085,6 +1105,7 @@ export class CPU {
   // ─────────────────────────────────────────────────────────────────
   private executeXY(useIX: boolean): number {
     const op = this.fetch()
+    this.regs.R = (this.regs.R & 0x80) | ((this.regs.R + 1) & 0x7f)
 
     // Helpers to read/write the active index register
     const getXY  = (): number           => useIX ? this.regs.IX : this.regs.IY
