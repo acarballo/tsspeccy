@@ -3,17 +3,8 @@ import { ULA, TSTATES_PER_FRAME } from './ULA.js'
 import { Renderer }               from './Renderer.js'
 import { Beeper }                 from '../audio/Beeper.js'
 import { IOBus }                  from '../io/IOBus.js'
+import { TapePlayer }             from '../tape/TapePlayer.js'
 
-/**
- * FrameLoop
- *
- * Runs the emulator at ~50 Hz using requestAnimationFrame.
- * Each tick:
- *   1. Fire maskable INT (ULA pulses /INT once per frame)
- *   2. Execute Z80 for TSTATES_PER_FRAME T-states, updating IOBus.currentTstate
- *   3. Notify Beeper that the frame ended
- *   4. Render ULA frame → canvas
- */
 export class FrameLoop {
   private running = false
   private rafId   = 0
@@ -24,6 +15,7 @@ export class FrameLoop {
     private readonly renderer: Renderer,
     private readonly beeper:   Beeper,
     private readonly io:       IOBus,
+    private readonly tape:     TapePlayer,
   ) {}
 
   fastBoot(maxFrames = 150): void {
@@ -56,20 +48,18 @@ export class FrameLoop {
     if (!this.running) return
 
     this.cpu.interrupt()
-
-    // Resume AudioContext after first user gesture (browsers require this)
     this.beeper.resume()
 
-    // Execute one frame, updating IOBus.currentTstate so Beeper
-    // knows exactly when each port write happened within the frame
     let tStates = 0
     while (tStates < TSTATES_PER_FRAME) {
       this.io.currentTstate = tStates
-      tStates += this.cpu.step()
+      const stepped = this.cpu.step()
+      // Advance tape in sync with CPU T-states
+      this.tape.advanceTstates(stepped)
+      tStates += stepped
     }
 
     this.beeper.endFrame(tStates)
-
     this.ula.renderFrame()
     this.renderer.drawFrame()
 

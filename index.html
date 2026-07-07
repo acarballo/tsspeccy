@@ -67,6 +67,8 @@
     button.accent   { border-color: #00d75f; color: #00d75f; }
     button.accent:hover:not(:disabled) { background: #00d75f18; }
     button.primary:hover:not(:disabled) { background: #00d7d718; }
+    button.accent  { border-color: #d7af00; color: #d7af00; }
+    button.accent:hover:not(:disabled) { background: #d7af0018; }
 
     .status-bar { font-size: .76rem; color: #888; min-height: 1.2em; }
 
@@ -116,6 +118,7 @@
   <div class="controls">
     <button id="btn-load"  class="primary">📂 Load ROM</button>
     <button id="btn-snap"  class="accent" disabled>🎮 Load Snapshot</button>
+    <button id="btn-tape"  class="accent" disabled>📼 Load Tape</button>
     <button id="btn-start" disabled>▶ Start</button>
     <button id="btn-stop"  disabled>⏹ Stop</button>
     <button id="btn-reset" disabled>↺ Reset</button>
@@ -189,6 +192,18 @@
 
   <input type="file" id="rom-input"  accept=".rom,.bin"      style="display:none" />
   <input type="file" id="snap-input" accept=".z80,.sna,.Z80,.SNA" style="display:none" />
+  <input type="file" id="tape-input" accept=".tap,.tzx,.TAP,.TZX" style="display:none" />
+  <!-- Tape controls -->
+  <div id="tape-panel" style="display:none;width:640px;margin:0 auto;background:#1a1a1a;border:1px solid #444;border-radius:4px;padding:10px 14px;font-family:'Courier New',monospace;font-size:12px;color:#c8c8c8">
+    <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+      <span style="color:#00d7d7;letter-spacing:.1em">📼 TAPE</span>
+      <button id="tape-play"  style="padding:3px 12px;background:#2a2a2a;border:1px solid #555;color:#c8c8c8;border-radius:3px;font-family:inherit;cursor:pointer">▶ Play</button>
+      <button id="tape-pause" style="padding:3px 12px;background:#2a2a2a;border:1px solid #555;color:#c8c8c8;border-radius:3px;font-family:inherit;cursor:pointer">⏸ Pause</button>
+      <button id="tape-stop"  style="padding:3px 12px;background:#2a2a2a;border:1px solid #555;color:#c8c8c8;border-radius:3px;font-family:inherit;cursor:pointer">⏹ Stop</button>
+      <span id="tape-status" style="color:#888;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"></span>
+    </div>
+    <div id="tape-blocks" style="margin-top:8px;max-height:100px;overflow-y:auto;line-height:1.6"></div>
+  </div>
   <div id="dbg-container" style="width:640px;margin:0 auto"></div>
   <script type="module" src="/src/main.ts"></script>
 </body>

@@ -2,6 +2,7 @@
  * main.ts — browser entry point
  */
 import { Spectrum }    from './Spectrum.js'
+import { loadTape }    from './tape/TapeLoader.js'
 import { DebugPanel } from './debugger/DebugPanel.js'
 
 const canvas    = document.getElementById('screen')    as HTMLCanvasElement
@@ -34,6 +35,7 @@ async function loadROM(file: File): Promise<void> {
     btnStart.disabled  = false
     btnSnap.disabled   = false
     btnReset.disabled  = false
+    btnTape.disabled   = false
   } catch (e) {
     setStatus(`ROM error: ${e}`, '#d75f5f')
   }
@@ -141,6 +143,46 @@ const helpEl = document.getElementById('kbd-help')
 document.getElementById('btn-help')?.addEventListener('click', () => {
   helpEl?.classList.toggle('hidden')
 })
+
+// ── Tape controls ─────────────────────────────────────────────────
+
+const btnTape   = document.getElementById('btn-tape')   as HTMLButtonElement
+const tapeInput = document.getElementById('tape-input') as HTMLInputElement
+const tapePanel = document.getElementById('tape-panel') as HTMLElement
+const tapeStatus = document.getElementById('tape-status') as HTMLSpanElement
+const tapeBlocks = document.getElementById('tape-blocks') as HTMLElement
+
+function updateTapeUI(): void {
+  const tp = spectrum.tape
+  tapeStatus.textContent = tp.isLoaded()
+    ? `Block ${spectrum.tape['blockIndex'] ?? 0 + 1}/${tp.totalBlocks()} — ${tp.currentBlock()?.description ?? ''}`
+    : 'No tape loaded'
+
+  // Block list
+  if (tp.isLoaded()) {
+    tapeBlocks.innerHTML = Array.from(
+      { length: tp.totalBlocks() },
+      (_, i) => `<div style="color:${i === (spectrum.tape as any).blockIndex ? '#00d7d7' : '#666'}">${i+1}. ${tp.blockDescription(i)}</div>`
+    ).join('')
+  }
+}
+
+btnTape.addEventListener('click', () => tapeInput.click())
+tapeInput.addEventListener('change', () => {
+  const file = tapeInput.files?.[0]
+  if (!file) return
+  file.arrayBuffer().then(buf => {
+    spectrum.loadTape(new Uint8Array(buf), file.name)
+    spectrum.tape.onStateChange = () => updateTapeUI()
+    tapePanel.style.display = ''
+    updateTapeUI()
+    setStatus(`Tape loaded: ${file.name}`)
+  }).catch(e => setStatus(`Tape error: ${e}`))
+})
+
+document.getElementById('tape-play')?.addEventListener('click',  () => { spectrum.tape.play();  updateTapeUI() })
+document.getElementById('tape-pause')?.addEventListener('click', () => { spectrum.tape.pause(); updateTapeUI() })
+document.getElementById('tape-stop')?.addEventListener('click',  () => { spectrum.tape.stop();  updateTapeUI() })
 
 // ── Debug panel ────────────────────────────────────────────────────
 
