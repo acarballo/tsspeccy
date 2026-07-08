@@ -213,3 +213,19 @@ document.getElementById('btn-debug')?.addEventListener('click', () => {
 // ── Init ──────────────────────────────────────────────────────────
 
 setStatus('Drop a .rom file or use Load ROM to begin.')
+
+// ── Speed control ──────────────────────────────────────────────────
+
+const speedSelect = document.getElementById('speed-select') as HTMLSelectElement
+const fpsDisplay  = document.getElementById('fps-display')  as HTMLSpanElement
+
+speedSelect.addEventListener('change', () => {
+  spectrum.speed = parseFloat(speedSelect.value)
+})
+
+// Show approximate target FPS
+setInterval(() => {
+  if (!spectrum.isRunning()) { fpsDisplay.textContent = ''; return }
+  const target = Math.min(60, Math.round(50 * spectrum.speed))
+  fpsDisplay.textContent = `~${target} fps`
+}, 500)

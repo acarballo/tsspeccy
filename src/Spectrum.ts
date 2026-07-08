@@ -71,4 +71,8 @@ export class Spectrum {
   }
 
   isRunning(): boolean { return this.loop.isRunning() }
+
+  /** Speed multiplier: 1.0 = normal ZX Spectrum speed (50 Hz) */
+  get speed(): number { return this.loop.speedFactor }
+  set speed(v: number) { this.loop.speedFactor = Math.max(0.25, Math.min(8, v)) }
 }
