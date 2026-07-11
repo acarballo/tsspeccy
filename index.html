@@ -16,7 +16,7 @@
       align-items: center;
       min-height: 100vh;
       padding: 24px 16px;
-      gap: 14px;
+      gap: 10px;
     }
 
     h1 { font-size: 1.4rem; letter-spacing: .15em; color: #00d7d7; }
@@ -31,28 +31,43 @@
     }
     #screen {
       display: block;
-      width: 640px; height: 480px;
+      width:  var(--scale-w, 640px);
+      height: var(--scale-h, 480px);
       image-rendering: pixelated;
       background: #000;
       outline: none;
       cursor: default;
+      transition: width .15s, height .15s;
     }
     #screen:focus { box-shadow: 0 0 0 2px #00d7d7; }
 
+    .screen-wrap:fullscreen,
+    .screen-wrap:-webkit-full-screen {
+      background: #000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 100vw !important;
+      height: 100vh !important;
+    }
+    .screen-wrap:fullscreen #screen,
+    .screen-wrap:-webkit-full-screen #screen {
+      width:  var(--scale-w, 640px);
+      height: var(--scale-h, 480px);
+    }
+
     .screen-wrap.drag-over::after {
-      content: 'Drop ROM here';
+      content: 'Drop ROM / Snapshot / Tape here';
       position: absolute; inset: 0;
       display: flex; align-items: center; justify-content: center;
-      font-size: 1.5rem;
+      font-size: 1.2rem;
       background: rgba(0,215,215,.2);
       border: 2px dashed #00d7d7;
       color: #00d7d7;
       pointer-events: none;
     }
 
-    /* ── Controls ───────────────────────────────────────────── */
-    .controls { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; }
-
+    /* ── Button styles ──────────────────────────────────────── */
     button {
       padding: 7px 18px;
       border: 1px solid #555; border-radius: 3px;
@@ -63,22 +78,44 @@
     }
     button:hover:not(:disabled) { background: #3a3a3a; border-color: #888; }
     button:disabled { opacity: .35; cursor: not-allowed; }
-    button.primary  { border-color: #00d7d7; color: #00d7d7; }
-    button.accent   { border-color: #00d75f; color: #00d75f; }
-    button.accent:hover:not(:disabled) { background: #00d75f18; }
+    button.primary { border-color: #00d7d7; color: #00d7d7; }
     button.primary:hover:not(:disabled) { background: #00d7d718; }
     button.accent  { border-color: #d7af00; color: #d7af00; }
-    button.accent:hover:not(:disabled) { background: #d7af0018; }
+    button.accent:hover:not(:disabled)  { background: #d7af0018; }
 
-    .status-bar { font-size: .76rem; color: #888; min-height: 1.2em; }
-    .speed-bar {
-      display: flex; align-items: center; gap: 8px;
+    /* ── Controls row ───────────────────────────────────────── */
+    .controls { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; }
+
+    /* ── Settings bar (speed + scale) ──────────────────────── */
+    .settings-bar {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      flex-wrap: wrap;
+      justify-content: center;
+      font-size: .78rem;
+      color: #888;
     }
-    .speed-bar select {
+    .settings-bar label { white-space: nowrap; }
+
+    .settings-bar select {
       background: #2a2a2a; border: 1px solid #555; border-radius: 3px;
       color: #e0e0e0; padding: 3px 8px;
-      font-family: 'Courier New', monospace; font-size: .78rem; cursor: pointer;
+      font-family: inherit; font-size: .78rem; cursor: pointer;
     }
+
+    .scale-btns { display: flex; gap: 4px; }
+    .scale-btn {
+      padding: 3px 10px;
+      background: #2a2a2a; border: 1px solid #555; border-radius: 3px;
+      color: #888; font-family: inherit; font-size: .78rem;
+      cursor: pointer; transition: background .12s, color .12s, border-color .12s;
+    }
+    .scale-btn:hover  { background: #3a3a3a; border-color: #888; color: #e0e0e0; }
+    .scale-btn.active { border-color: #00d7d7; color: #00d7d7; background: #00d7d712; }
+
+    /* ── Status bar ─────────────────────────────────────────── */
+    .status-bar { font-size: .76rem; color: #888; min-height: 1.2em; }
 
     /* ── Keyboard map ───────────────────────────────────────── */
     #kbd-help {
@@ -93,24 +130,19 @@
       grid-template-columns: repeat(10, 1fr);
       gap: 3px;
     }
-    .kbd-row {
-      display: contents;
-    }
     .key {
       background: #333; border: 1px solid #555; border-radius: 3px;
       padding: 4px 2px; text-align: center;
       display: flex; flex-direction: column; align-items: center; gap: 1px;
     }
-    .key .main  { color: #e0e0e0; font-size: .75rem; font-weight: bold; }
-    .key .sub   { color: #888;    font-size: .6rem; }
-    .key .sym   { color: #d7d700; font-size: .6rem; }
-
-    .key-shift  { background: #2a3a2a; border-color: #3a6a3a; }
-    .key-enter  { background: #2a2a3a; border-color: #3a3a6a; }
-    .key-space  { grid-column: span 2; background: #2a2a3a; border-color: #3a3a6a; }
-    .key-ss     { background: #3a2a2a; border-color: #6a3a3a; }
-
-    .kbd-note { margin-top: 8px; color: #666; font-size: .68rem; line-height: 1.5; }
+    .key .main { color: #e0e0e0; font-size: .75rem; font-weight: bold; }
+    .key .sub  { color: #888;    font-size: .6rem; }
+    .key .sym  { color: #d7d700; font-size: .6rem; }
+    .key-shift { background: #2a3a2a; border-color: #3a6a3a; }
+    .key-enter { background: #2a2a3a; border-color: #3a3a6a; }
+    .key-space { grid-column: span 2; background: #2a2a3a; border-color: #3a3a6a; }
+    .key-ss    { background: #3a2a2a; border-color: #6a3a3a; }
+    .kbd-note  { margin-top: 8px; color: #666; font-size: .68rem; line-height: 1.5; }
 
     footer { margin-top: auto; font-size: .68rem; color: #444; }
   </style>
@@ -123,10 +155,11 @@
     <canvas id="screen" tabindex="0"></canvas>
   </div>
 
+  <!-- Main controls -->
   <div class="controls">
     <button id="btn-load"  class="primary">📂 Load ROM</button>
-    <button id="btn-snap"  class="accent" disabled>🎮 Load Snapshot</button>
-    <button id="btn-tape"  class="accent" disabled>📼 Load Tape</button>
+    <button id="btn-snap"  class="accent"  disabled>🎮 Load Snapshot</button>
+    <button id="btn-tape"  class="accent"  disabled>📼 Load Tape</button>
     <button id="btn-start" disabled>▶ Start</button>
     <button id="btn-stop"  disabled>⏹ Stop</button>
     <button id="btn-reset" disabled>↺ Reset</button>
@@ -134,8 +167,9 @@
     <button id="btn-debug">🔬 Debug</button>
   </div>
 
-  <div class="speed-bar">
-    <label for="speed-select" style="color:#888;font-size:.78rem">⏱ Speed:</label>
+  <!-- Settings: speed + scale on one line -->
+  <div class="settings-bar">
+    <label for="speed-select">⏱ Speed:</label>
     <select id="speed-select">
       <option value="0.5">× 0.5 — Slow</option>
       <option value="1" selected>× 1.0 — Normal (50 Hz)</option>
@@ -144,52 +178,65 @@
       <option value="4">× 4.0 — Turbo</option>
       <option value="8">× 8.0 — Max</option>
     </select>
-    <span id="fps-display" style="color:#555;font-size:.72rem;margin-left:8px"></span>
+    <span id="fps-display" style="color:#555;font-size:.72rem"></span>
+
+    <span style="width:1px;height:16px;background:#444;margin:0 4px"></span>
+
+    <label>🖥 Scale:</label>
+    <div class="scale-btns">
+      <button class="scale-btn" data-scale="1">×1</button>
+      <button class="scale-btn active" data-scale="2">×2</button>
+      <button class="scale-btn" data-scale="3">×3</button>
+      <button class="scale-btn" data-scale="4">×4</button>
+    </div>
+    <select id="scale-select">
+      <option value="1">320×240</option>
+      <option value="1.5">480×360</option>
+      <option value="2" selected>640×480</option>
+      <option value="2.5">800×600</option>
+      <option value="3">960×720</option>
+      <option value="4">1280×960</option>
+    </select>
+    <button id="btn-fullscreen" class="scale-btn">⛶ Full</button>
   </div>
+
   <p class="status-bar"><span id="status"></span></p>
 
   <!-- Keyboard reference -->
   <div id="kbd-help" class="hidden">
     <h2>ZX SPECTRUM KEYBOARD MAP</h2>
     <div class="kbd-grid">
-      <!-- Row 3 — 1…5 -->
       <div class="key"><span class="main">1</span><span class="sym">!</span></div>
       <div class="key"><span class="main">2</span><span class="sym">@</span></div>
       <div class="key"><span class="main">3</span><span class="sym">#</span></div>
       <div class="key"><span class="main">4</span><span class="sym">$</span></div>
       <div class="key"><span class="main">5</span><span class="sym">%</span></div>
-      <!-- Row 4 — 6…0 -->
       <div class="key"><span class="main">6</span><span class="sym">&amp;</span></div>
       <div class="key"><span class="main">7</span><span class="sym">'</span></div>
       <div class="key"><span class="main">8</span><span class="sym">(</span></div>
       <div class="key"><span class="main">9</span><span class="sym">)</span></div>
       <div class="key"><span class="main">0</span><span class="sym">_</span></div>
-      <!-- Row 2 — Q…T -->
       <div class="key"><span class="main">Q</span></div>
       <div class="key"><span class="main">W</span></div>
       <div class="key"><span class="main">E</span></div>
       <div class="key"><span class="main">R</span></div>
       <div class="key"><span class="main">T</span></div>
-      <!-- Row 5 — Y…P -->
       <div class="key"><span class="main">Y</span></div>
       <div class="key"><span class="main">U</span></div>
       <div class="key"><span class="main">I</span></div>
       <div class="key"><span class="main">O</span></div>
       <div class="key"><span class="main">P</span></div>
-      <!-- Row 1 — A…G -->
       <div class="key key-shift"><span class="main">Caps</span><span class="sub">Shift</span></div>
       <div class="key"><span class="main">A</span></div>
       <div class="key"><span class="main">S</span></div>
       <div class="key"><span class="main">D</span></div>
       <div class="key"><span class="main">F</span></div>
       <div class="key"><span class="main">G</span></div>
-      <!-- Row 6 — H…Enter -->
       <div class="key"><span class="main">H</span></div>
       <div class="key"><span class="main">J</span></div>
       <div class="key"><span class="main">K</span></div>
       <div class="key"><span class="main">L</span></div>
       <div class="key key-enter"><span class="main">Enter</span></div>
-      <!-- Row 0 — Z…V + Row 7 — B…Space -->
       <div class="key key-shift"><span class="main">Caps</span><span class="sub">Shift</span></div>
       <div class="key"><span class="main">Z</span></div>
       <div class="key"><span class="main">X</span></div>
@@ -204,16 +251,18 @@
     <p class="kbd-note">
       Caps Shift = Shift &nbsp;|&nbsp; Symbol Shift = Alt &nbsp;|&nbsp;
       Click the canvas before typing &nbsp;|&nbsp;
-      Caps+1=Edit &nbsp; Caps+5=← &nbsp; Caps+6=↓ &nbsp; Caps+7=↑ &nbsp; Caps+8=→ &nbsp; Caps+0=Delete
+      Caps+5=← &nbsp; Caps+6=↓ &nbsp; Caps+7=↑ &nbsp; Caps+8=→ &nbsp; Caps+0=Delete
     </p>
   </div>
 
   <footer>ZX Spectrum 48K emulator · TypeScript + Canvas</footer>
 
-  <input type="file" id="rom-input"  accept=".rom,.bin"      style="display:none" />
+  <!-- Hidden file inputs -->
+  <input type="file" id="rom-input"  accept=".rom,.bin"           style="display:none" />
   <input type="file" id="snap-input" accept=".z80,.sna,.Z80,.SNA" style="display:none" />
   <input type="file" id="tape-input" accept=".tap,.tzx,.TAP,.TZX" style="display:none" />
-  <!-- Tape controls -->
+
+  <!-- Tape panel -->
   <div id="tape-panel" style="display:none;width:640px;margin:0 auto;background:#1a1a1a;border:1px solid #444;border-radius:4px;padding:10px 14px;font-family:'Courier New',monospace;font-size:12px;color:#c8c8c8">
     <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
       <span style="color:#00d7d7;letter-spacing:.1em">📼 TAPE</span>
@@ -224,7 +273,10 @@
     </div>
     <div id="tape-blocks" style="margin-top:8px;max-height:100px;overflow-y:auto;line-height:1.6"></div>
   </div>
+
+  <!-- Debug panel container -->
   <div id="dbg-container" style="width:640px;margin:0 auto"></div>
+
   <script type="module" src="/src/main.ts"></script>
 </body>
 </html>

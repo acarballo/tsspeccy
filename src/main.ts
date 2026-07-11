@@ -214,6 +214,67 @@ document.getElementById('btn-debug')?.addEventListener('click', () => {
 
 setStatus('Drop a .rom file or use Load ROM to begin.')
 
+// ── Scale control ─────────────────────────────────────────────────
+
+const scaleSelect   = document.getElementById('scale-select')  as HTMLSelectElement
+const btnFullscreen = document.getElementById('btn-fullscreen') as HTMLButtonElement
+const screenWrapEl  = document.getElementById('screen-wrap')   as HTMLElement
+
+/** The Spectrum's internal resolution is 320×240 (including border).
+ *  We scale it up by CSS — the canvas pixel count never changes. */
+function applyScale(factor: number): void {
+  const w = Math.round(320 * factor)
+  const h = Math.round(240 * factor)
+  document.documentElement.style.setProperty('--scale-w', `${w}px`)
+  document.documentElement.style.setProperty('--scale-h', `${h}px`)
+  // Widen helper panels to match
+  const panels = document.querySelectorAll<HTMLElement>('#kbd-help, #tape-panel, #dbg-container')
+  panels.forEach(el => { el.style.width = `${w}px` })
+}
+
+scaleSelect.addEventListener('change', () => {
+  applyScale(parseFloat(scaleSelect.value))
+})
+
+// Apply default scale on load (reads the selected option)
+applyScale(parseFloat(scaleSelect.value))
+
+// Scale buttons (x1 x2 x3 x4)
+document.querySelectorAll('.scale-btn[data-scale]').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const factor = parseFloat((btn as HTMLElement).dataset['scale'] ?? '2')
+    applyScale(factor)
+    scaleSelect.value = String(factor)
+    document.querySelectorAll('.scale-btn[data-scale]').forEach(b => b.classList.remove('active'))
+    btn.classList.add('active')
+  })
+})
+
+// Fullscreen
+btnFullscreen.addEventListener('click', () => {
+  if (!document.fullscreenElement) {
+    screenWrapEl.requestFullscreen().catch(() => {})
+  } else {
+    document.exitFullscreen()
+  }
+})
+
+document.addEventListener('fullscreenchange', () => {
+  if (document.fullscreenElement) {
+    // Fill the screen — scale canvas to fit viewport maintaining 4:3
+    const vw = window.innerWidth
+    const vh = window.innerHeight
+    const scale = Math.min(vw / 320, vh / 240)
+    document.documentElement.style.setProperty('--scale-w', `${Math.floor(320 * scale)}px`)
+    document.documentElement.style.setProperty('--scale-h', `${Math.floor(240 * scale)}px`)
+    btnFullscreen.textContent = '✕ Exit'
+  } else {
+    // Restore selected scale
+    applyScale(parseFloat(scaleSelect.value))
+    btnFullscreen.textContent = '⛶ Full'
+  }
+})
+
 // ── Speed control ──────────────────────────────────────────────────
 
 const speedSelect = document.getElementById('speed-select') as HTMLSelectElement
