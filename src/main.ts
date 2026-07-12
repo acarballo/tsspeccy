@@ -36,6 +36,7 @@ async function loadROM(file: File): Promise<void> {
     btnSnap.disabled   = false
     btnReset.disabled  = false
     btnTape.disabled   = false
+    btnSave.disabled   = false
   } catch (e) {
     setStatus(`ROM error: ${e}`, '#d75f5f')
   }
@@ -147,6 +148,7 @@ document.getElementById('btn-help')?.addEventListener('click', () => {
 // ── Tape controls ─────────────────────────────────────────────────
 
 const btnTape   = document.getElementById('btn-tape')   as HTMLButtonElement
+const btnSave   = document.getElementById('btn-save')   as HTMLButtonElement
 const tapeInput = document.getElementById('tape-input') as HTMLInputElement
 const tapePanel = document.getElementById('tape-panel') as HTMLElement
 const tapeStatus = document.getElementById('tape-status') as HTMLSpanElement
@@ -168,6 +170,25 @@ function updateTapeUI(): void {
 }
 
 btnTape.addEventListener('click', () => tapeInput.click())
+
+// ── Save snapshot ──────────────────────────────────────────────────
+
+btnSave.addEventListener('click', () => {
+  // Build a timestamp-based filename: tsspeccy-YYYYMMDD-HHMMSS.z80
+  const now = new Date()
+  const ts  = [
+    now.getFullYear(),
+    String(now.getMonth() + 1).padStart(2, '0'),
+    String(now.getDate()).padStart(2, '0'),
+    '-',
+    String(now.getHours()).padStart(2, '0'),
+    String(now.getMinutes()).padStart(2, '0'),
+    String(now.getSeconds()).padStart(2, '0'),
+  ].join('')
+  const filename = `tsspeccy-${ts}.z80`
+  spectrum.saveSnapshot(filename)
+  setStatus(`Snapshot saved: ${filename}`)
+})
 tapeInput.addEventListener('change', () => {
   const file = tapeInput.files?.[0]
   if (!file) return

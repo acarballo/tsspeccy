@@ -7,7 +7,8 @@ import { Keyboard }      from './io/Keyboard.js'
 import { IOBus }         from './io/IOBus.js'
 import { Beeper }        from './audio/Beeper.js'
 import { TapePlayer }    from './tape/TapePlayer.js'
-import { loadSnapshot }  from './snapshot/SnapshotLoader.js'
+import { loadSnapshot }               from './snapshot/SnapshotLoader.js'
+import { saveZ80, downloadSnapshot }  from './snapshot/SaveSnapshot.js'
 import { loadTape }      from './tape/TapeLoader.js'
 
 export class Spectrum {
@@ -71,6 +72,20 @@ export class Spectrum {
   }
 
   isRunning(): boolean { return this.loop.isRunning() }
+
+  /**
+   * Serialise current state to a .z80 v1 file and trigger a browser download.
+   * The emulator keeps running — save is non-destructive.
+   */
+  saveSnapshot(filename = 'tsspeccy.z80'): void {
+    const data = saveZ80({
+      regs:   this.cpu.regs,
+      halted: this.cpu.halted,
+      mem:    this.mem,
+      ula:    this.ula,
+    })
+    downloadSnapshot(data, filename)
+  }
 
   /** Speed multiplier: 1.0 = normal ZX Spectrum speed (50 Hz) */
   get speed(): number { return this.loop.speedFactor }
