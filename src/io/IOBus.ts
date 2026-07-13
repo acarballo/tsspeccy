@@ -10,6 +10,7 @@ import { Keyboard }    from './Keyboard.js'
 import { ULA }         from '../ula/ULA.js'
 import { Beeper }      from '../audio/Beeper.js'
 import { TapePlayer }  from '../tape/TapePlayer.js'
+import { Kempston, KEMPSTON_PORT } from './Kempston.js'
 
 export class IOBus {
   currentTstate = 0
@@ -19,9 +20,15 @@ export class IOBus {
     private readonly ula:         ULA,
     private readonly beeper?:     Beeper,
     private readonly tape?:       TapePlayer,
+    private readonly kempston?:   Kempston,
   ) {}
 
   read(port: number): number {
+    // Kempston joystick: port 0x1F
+    if ((port & 0xff) === KEMPSTON_PORT) {
+      return this.kempston?.read() ?? 0x00
+    }
+
     if ((port & 0x01) === 0) {
       const portHigh = (port >> 8) & 0xff
       // Keyboard: bits 4-0 (0 = pressed)

@@ -4,6 +4,7 @@ import { ULA }           from './ula/ULA.js'
 import { Renderer }      from './ula/Renderer.js'
 import { FrameLoop }     from './ula/FrameLoop.js'
 import { Keyboard }      from './io/Keyboard.js'
+import { Kempston }     from './io/Kempston.js'
 import { IOBus }         from './io/IOBus.js'
 import { Beeper }        from './audio/Beeper.js'
 import { TapePlayer }    from './tape/TapePlayer.js'
@@ -14,6 +15,7 @@ import { loadTape }      from './tape/TapeLoader.js'
 export class Spectrum {
   readonly mem      : Memory
   readonly keyboard : Keyboard
+  readonly kempston : Kempston
   readonly ula      : ULA
   readonly beeper   : Beeper
   readonly tape     : TapePlayer
@@ -25,10 +27,11 @@ export class Spectrum {
   constructor(canvas: HTMLCanvasElement) {
     this.mem      = new Memory()
     this.keyboard = new Keyboard()
+    this.kempston = new Kempston()
     this.ula      = new ULA(this.mem)
     this.beeper   = new Beeper()
     this.tape     = new TapePlayer()
-    this.io       = new IOBus(this.keyboard, this.ula, this.beeper, this.tape)
+    this.io       = new IOBus(this.keyboard, this.ula, this.beeper, this.tape, this.kempston)
     this.cpu      = new CPU(this.mem, this.io)
     this.renderer = new Renderer(canvas, this.ula)
     this.loop     = new FrameLoop(this.cpu, this.ula, this.renderer, this.beeper, this.io, this.tape)
@@ -68,6 +71,7 @@ export class Spectrum {
     this.cpu.halted  = false
     this.cpu.tStates = 0
     this.keyboard.reset()
+    this.kempston.reset()
     this.loop.start()
   }
 

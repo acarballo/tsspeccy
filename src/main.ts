@@ -129,13 +129,26 @@ btnReset.addEventListener('click', () => {
 
 canvas.setAttribute('tabindex', '0')
 
+// Keys routed to Kempston joystick instead of Spectrum keyboard matrix
+const KEMPSTON_KEYS = new Set(['ArrowUp','ArrowDown','ArrowLeft','ArrowRight','AltLeft','AltRight'])
+
 canvas.addEventListener('keydown', e => {
   const blocked = ['Space','ArrowUp','ArrowDown','ArrowLeft','ArrowRight',
                    'F1','F2','F3','F4','F5','F6','F7','F8','F9','F10','F11','F12']
   if (blocked.includes(e.code)) e.preventDefault()
-  spectrum.keyboard.keyDown(e.code)
+  if (KEMPSTON_KEYS.has(e.code)) {
+    spectrum.kempston.keyDown(e.code)
+  } else {
+    spectrum.keyboard.keyDown(e.code)
+  }
 })
-canvas.addEventListener('keyup',  e => spectrum.keyboard.keyUp(e.code))
+canvas.addEventListener('keyup', e => {
+  if (KEMPSTON_KEYS.has(e.code)) {
+    spectrum.kempston.keyUp(e.code)
+  } else {
+    spectrum.keyboard.keyUp(e.code)
+  }
+})
 canvas.addEventListener('click',  () => canvas.focus())
 
 // ── Keyboard help ──────────────────────────────────────────────────
