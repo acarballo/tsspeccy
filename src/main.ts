@@ -218,6 +218,32 @@ document.getElementById('tape-play')?.addEventListener('click',  () => { spectru
 document.getElementById('tape-pause')?.addEventListener('click', () => { spectrum.tape.pause(); updateTapeUI() })
 document.getElementById('tape-stop')?.addEventListener('click',  () => { spectrum.tape.stop();  updateTapeUI() })
 
+document.getElementById('tape-turbo')?.addEventListener('click', () => {
+  if (!spectrum.tape.isLoaded()) return
+
+  // Ensure tape is rewound and playing before turbo
+  spectrum.tape.rewind()
+  spectrum.tape.play()
+
+  const turboBtn = document.getElementById('tape-turbo') as HTMLButtonElement
+  turboBtn.disabled = true
+  turboBtn.textContent = '⚡ Loading…'
+  setStatus('Turbo loading tape…')
+
+  spectrum.turboLoad(
+    (block, total, description) => {
+      tapeStatus.textContent = `Block ${block + 1}/${total} — ${description}`
+      updateTapeUI()
+    },
+    () => {
+      turboBtn.disabled = false
+      turboBtn.textContent = '⚡ Turbo'
+      setStatus('Tape loaded ✓')
+      updateTapeUI()
+    }
+  )
+})
+
 // ── Debug panel ────────────────────────────────────────────────────
 
 const dbgContainer = document.getElementById('dbg-container')!

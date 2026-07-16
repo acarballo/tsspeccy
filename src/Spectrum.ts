@@ -61,6 +61,18 @@ export class Spectrum {
     this.tape.load(blocks)
   }
 
+  /**
+   * Load tape at maximum speed without rendering or audio.
+   * The emulator pauses, runs silently until tape finishes, then resumes.
+   * onProgress and onDone are optional UI callbacks.
+   */
+  turboLoad(
+    onProgress?: (block: number, total: number, description: string) => void,
+    onDone?: () => void,
+  ): void {
+    this.loop.turboLoad(onProgress, onDone)
+  }
+
   start(): void  { this.loop.start() }
   stop(): void   { this.loop.stop() }
 

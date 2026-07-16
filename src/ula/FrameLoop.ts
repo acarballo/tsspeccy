@@ -65,6 +65,86 @@ export class FrameLoop {
   }
 
   // ─────────────────────────────────────────────────────────────────
+  // Turbo load: run tape at max speed without rendering/audio
+  //
+  // Executes CPU frames as fast as possible until tape finishes.
+  // Work is split into ~50ms chunks via setTimeout to keep the
+  // browser responsive and allow UI updates between chunks.
+  //
+  // onProgress(blockIndex, totalBlocks) — called after each chunk
+  // onDone()                            — called when tape finishes
+  // ─────────────────────────────────────────────────────────────────
+
+  /** Max real-time ms to spend per chunk before yielding to browser */
+  private static readonly TURBO_CHUNK_MS = 50
+
+  /** Max frames to run in turbo mode (safety limit ~5 minutes of tape) */
+  private static readonly TURBO_MAX_FRAMES = 50 * 60 * 5
+
+  turboLoad(
+    onProgress?: (block: number, total: number, description: string) => void,
+    onDone?: () => void,
+  ): void {
+    if (!this.tape.isLoaded()) { onDone?.(); return }
+
+    // Pause normal loop during turbo — we drive CPU ourselves
+    const wasRunning = this.running
+    if (wasRunning) this.stop()
+
+    // Ensure tape is playing
+    if (this.tape.state !== 'playing') this.tape.play()
+
+    let framesRun = 0
+
+    const runChunk = (): void => {
+      const chunkStart = performance.now()
+
+      while (true) {
+        // Check tape finished
+        if (this.tape.state === 'finished' || this.tape.state === 'stopped') {
+          this.ula.renderFrame()
+          this.renderer.drawFrame()
+          if (wasRunning) this.start()
+          onDone?.()
+          return
+        }
+
+        // Safety limit
+        if (framesRun >= FrameLoop.TURBO_MAX_FRAMES) {
+          if (wasRunning) this.start()
+          onDone?.()
+          return
+        }
+
+        // Run one frame silently (no beeper, no render)
+        this.cpu.interrupt()
+        let t = 0
+        while (t < TSTATES_PER_FRAME) {
+          const stepped = this.cpu.step()
+          this.tape.advanceTstates(stepped)
+          t += stepped
+        }
+        framesRun++
+
+        // Yield to browser every TURBO_CHUNK_MS of real time
+        if (performance.now() - chunkStart >= FrameLoop.TURBO_CHUNK_MS) {
+          // Report progress
+          const block = (this.tape as any).blockIndex as number ?? 0
+          onProgress?.(block, this.tape.totalBlocks(), this.tape.currentBlock()?.description ?? '')
+          // Render current frame so user can see loading progress
+          this.ula.renderFrame()
+          this.renderer.drawFrame()
+          // Schedule next chunk
+          setTimeout(runChunk, 0)
+          return
+        }
+      }
+    }
+
+    setTimeout(runChunk, 0)
+  }
+
+  // ─────────────────────────────────────────────────────────────────
   // Lifecycle
   // ─────────────────────────────────────────────────────────────────
 
