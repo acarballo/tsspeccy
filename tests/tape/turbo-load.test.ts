@@ -9,11 +9,11 @@ function makeBlock(pulses: number[], desc = 'Test'): TapeBlock {
   return { description: desc, pulses: new Uint32Array(pulses) }
 }
 
-/** Simulate turboLoad logic: run tape at max speed until finished */
+/** Simulate turboLoad logic: run tape at max speed until finished or stopped */
 function simulateTurbo(tape: TapePlayer, maxFrames = 10000): number {
   const TSTATES_PER_FRAME = 69888
   let frames = 0
-  while (tape.state === 'playing' && frames < maxFrames) {
+  while ((tape.state === 'playing') && frames < maxFrames) {
     tape.advanceTstates(TSTATES_PER_FRAME)
     frames++
   }
@@ -102,13 +102,14 @@ describe('Turbo load — TapePlayer mechanics', () => {
     expect(tape.earBit()).toBe(0x00)
   })
 
-  it('stopped tape does not advance in turbo', () => {
+  it('stopped tape does not change state in turbo', () => {
     const tape = new TapePlayer()
     tape.load([makeBlock([100])])
     // Do NOT call play() — tape stays stopped
+    // simulateTurbo loop exits immediately because state !== 'playing'
     const frames = simulateTurbo(tape, 100)
     expect(tape.state).toBe('stopped')
-    expect(frames).toBe(100)  // hit the limit, tape never advanced
+    expect(frames).toBe(0)  // loop never ran — tape was not playing
   })
 
   it('onStateChange fires when turbo finishes', () => {
