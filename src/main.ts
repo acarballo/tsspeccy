@@ -129,22 +129,33 @@ btnReset.addEventListener('click', () => {
 
 canvas.setAttribute('tabindex', '0')
 
-// Keys routed to Kempston joystick instead of Spectrum keyboard matrix
-const KEMPSTON_KEYS = new Set(['ArrowUp','ArrowDown','ArrowLeft','ArrowRight','AltLeft','AltRight'])
+// Arrow keys go exclusively to Kempston (no Spectrum equivalent)
+// Alt keys go to BOTH Kempston (fire) AND Spectrum keyboard (Symbol Shift)
+const KEMPSTON_ONLY = new Set(['ArrowUp','ArrowDown','ArrowLeft','ArrowRight'])
+const KEMPSTON_FIRE = new Set(['AltLeft','AltRight'])
 
 canvas.addEventListener('keydown', e => {
   const blocked = ['Space','ArrowUp','ArrowDown','ArrowLeft','ArrowRight',
                    'F1','F2','F3','F4','F5','F6','F7','F8','F9','F10','F11','F12']
   if (blocked.includes(e.code)) e.preventDefault()
-  if (KEMPSTON_KEYS.has(e.code)) {
+
+  if (KEMPSTON_ONLY.has(e.code)) {
+    // Arrows → Kempston only
     spectrum.kempston.keyDown(e.code)
+  } else if (KEMPSTON_FIRE.has(e.code)) {
+    // Alt → Kempston fire + Spectrum Symbol Shift (needed for LOAD "")
+    spectrum.kempston.keyDown(e.code)
+    spectrum.keyboard.keyDown(e.code)
   } else {
     spectrum.keyboard.keyDown(e.code)
   }
 })
 canvas.addEventListener('keyup', e => {
-  if (KEMPSTON_KEYS.has(e.code)) {
+  if (KEMPSTON_ONLY.has(e.code)) {
     spectrum.kempston.keyUp(e.code)
+  } else if (KEMPSTON_FIRE.has(e.code)) {
+    spectrum.kempston.keyUp(e.code)
+    spectrum.keyboard.keyUp(e.code)
   } else {
     spectrum.keyboard.keyUp(e.code)
   }
