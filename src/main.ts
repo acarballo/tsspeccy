@@ -29,7 +29,8 @@ function setStatus(msg: string, colour = '#888'): void {
 async function loadROM(file: File): Promise<void> {
   try {
     const buf = await file.arrayBuffer()
-    spectrum.loadROM(new Uint8Array(buf))
+    const romData = new Uint8Array(buf)
+    spectrum.loadROM(romData)
     romLoaded = true
     setStatus(`ROM: ${file.name} (${buf.byteLength} bytes) — ready`, '#00d7d7')
     btnStart.disabled  = false
@@ -37,9 +38,44 @@ async function loadROM(file: File): Promise<void> {
     btnReset.disabled  = false
     btnTape.disabled   = false
     btnSave.disabled   = false
+    hideWelcome()
+    // Persist ROM in localStorage so next visit loads automatically
+    try {
+      localStorage.setItem('tsspeccy_rom_name', file.name)
+      localStorage.setItem('tsspeccy_rom_data', bufferToBase64(romData))
+    } catch {
+      // localStorage might be full or unavailable — not critical
+    }
   } catch (e) {
     setStatus(`ROM error: ${e}`, '#d75f5f')
   }
+}
+
+function loadROMFromData(name: string, data: Uint8Array): void {
+  spectrum.loadROM(data)
+  romLoaded = true
+  setStatus(`ROM: ${name} (auto-loaded) — ready`, '#00d7d7')
+  btnStart.disabled  = false
+  btnSnap.disabled   = false
+  btnReset.disabled  = false
+  btnTape.disabled   = false
+  btnSave.disabled   = false
+  hideWelcome()
+}
+
+// ── Base64 helpers for localStorage ───────────────────────────────
+
+function bufferToBase64(buf: Uint8Array): string {
+  let binary = ''
+  for (let i = 0; i < buf.length; i++) binary += String.fromCharCode(buf[i]!)
+  return btoa(binary)
+}
+
+function base64ToBuffer(b64: string): Uint8Array {
+  const binary = atob(b64)
+  const buf = new Uint8Array(binary.length)
+  for (let i = 0; i < binary.length; i++) buf[i] = binary.charCodeAt(i)
+  return buf
 }
 
 // ── Snapshot loading ───────────────────────────────────────────────
@@ -69,6 +105,16 @@ async function loadSnapshot(file: File): Promise<void> {
 // ── File pickers ───────────────────────────────────────────────────
 
 btnLoad.addEventListener('click', () => romInput.click())
+
+// Long-press or right-click Load ROM → forget saved ROM
+btnLoad.addEventListener('contextmenu', e => {
+  e.preventDefault()
+  try {
+    localStorage.removeItem('tsspeccy_rom_name')
+    localStorage.removeItem('tsspeccy_rom_data')
+    setStatus('Saved ROM cleared. Load a new ROM to continue.', '#d7af00')
+  } catch { /* ignore */ }
+})
 romInput.addEventListener('change', () => {
   const f = romInput.files?.[0]; if (f) loadROM(f)
 })
@@ -78,26 +124,37 @@ snapInput.addEventListener('change', () => {
   const f = snapInput.files?.[0]; if (f) loadSnapshot(f)
 })
 
-// ── Drag and drop — detect ROM vs snapshot by extension ───────────
+// ── Smart drag & drop — auto-detects file type ────────────────────
 
-screenWrap.addEventListener('dragover', e => {
+function dispatchFile(file: File): void {
+  const ext = file.name.split('.').pop()?.toLowerCase() ?? ''
+  if (['rom', 'bin'].includes(ext)) {
+    loadROM(file)
+  } else if (['z80', 'sna'].includes(ext)) {
+    loadSnapshot(file)
+  } else if (['tap', 'tzx'].includes(ext)) {
+    loadTapeFile(file)
+  } else {
+    setStatus(`Unknown file type: .${ext} — drop a .rom, .z80, .sna, .tap or .tzx`, '#d7af00')
+  }
+}
+
+// Allow dropping anywhere on the page (not just the canvas)
+document.addEventListener('dragover', e => {
   e.preventDefault()
   screenWrap.classList.add('drag-over')
 })
-screenWrap.addEventListener('dragleave', () => screenWrap.classList.remove('drag-over'))
-screenWrap.addEventListener('drop', e => {
+document.addEventListener('dragleave', e => {
+  // Only remove class if leaving the window entirely
+  if ((e as DragEvent).relatedTarget === null) {
+    screenWrap.classList.remove('drag-over')
+  }
+})
+document.addEventListener('drop', e => {
   e.preventDefault()
   screenWrap.classList.remove('drag-over')
   const file = e.dataTransfer?.files[0]
-  if (!file) return
-  const ext = file.name.split('.').pop()?.toLowerCase()
-  if (ext === 'rom' || ext === 'bin') {
-    loadROM(file)
-  } else if (ext === 'z80' || ext === 'sna') {
-    loadSnapshot(file)
-  } else {
-    setStatus(`Unknown file type: .${ext}`, '#d7af00')
-  }
+  if (file) dispatchFile(file)
 })
 
 // ── Controls ───────────────────────────────────────────────────────
@@ -213,9 +270,8 @@ btnSave.addEventListener('click', () => {
   spectrum.saveSnapshot(filename)
   setStatus(`Snapshot saved: ${filename}`)
 })
-tapeInput.addEventListener('change', () => {
-  const file = tapeInput.files?.[0]
-  if (!file) return
+function loadTapeFile(file: File): void {
+  if (!romLoaded) { setStatus('Load a ROM first before loading a tape.', '#d7af00'); return }
   file.arrayBuffer().then(buf => {
     spectrum.loadTape(new Uint8Array(buf), file.name)
     spectrum.tape.onStateChange = () => updateTapeUI()
@@ -223,6 +279,11 @@ tapeInput.addEventListener('change', () => {
     updateTapeUI()
     setStatus(`Tape loaded: ${file.name}`)
   }).catch(e => setStatus(`Tape error: ${e}`))
+}
+
+tapeInput.addEventListener('change', () => {
+  const file = tapeInput.files?.[0]
+  if (file) loadTapeFile(file)
 })
 
 document.getElementById('tape-play')?.addEventListener('click',  () => { spectrum.tape.play();  updateTapeUI() })
@@ -283,7 +344,31 @@ document.getElementById('btn-debug')?.addEventListener('click', () => {
 
 // ── Init ──────────────────────────────────────────────────────────
 
-setStatus('Drop a .rom file or use Load ROM to begin.')
+// ── Welcome screen ────────────────────────────────────────────────
+
+const welcomeEl = document.getElementById('welcome-screen')
+
+function hideWelcome(): void {
+  if (welcomeEl) welcomeEl.style.display = 'none'
+}
+
+// ── Auto-load ROM from localStorage ──────────────────────────────
+
+;(function tryAutoLoadROM() {
+  try {
+    const name = localStorage.getItem('tsspeccy_rom_name')
+    const b64  = localStorage.getItem('tsspeccy_rom_data')
+    if (name && b64) {
+      const data = base64ToBuffer(b64)
+      loadROMFromData(name, data)
+      setStatus(`ROM auto-loaded: ${name} — click Start`, '#00d7d7')
+      return
+    }
+  } catch {
+    // localStorage unavailable or corrupted
+  }
+  setStatus('Drop a .rom, .z80, .sna, .tap or .tzx file anywhere — or use the buttons above.')
+})()
 
 // ── Scale control ─────────────────────────────────────────────────
 

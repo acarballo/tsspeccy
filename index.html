@@ -57,7 +57,7 @@
     }
 
     .screen-wrap.drag-over::after {
-      content: 'Drop ROM / Snapshot / Tape here';
+      content: 'Drop .rom  .z80  .sna  .tap  .tzx';
       position: absolute; inset: 0;
       display: flex; align-items: center; justify-content: center;
       font-size: 1.2rem;
@@ -153,6 +153,30 @@
 
   <div class="screen-wrap" id="screen-wrap">
     <canvas id="screen" tabindex="0"></canvas>
+    <!-- Welcome overlay shown until ROM is loaded -->
+    <div id="welcome-screen" style="
+      position:absolute; inset:0;
+      background:rgba(0,0,0,.88);
+      display:flex; flex-direction:column;
+      align-items:center; justify-content:center;
+      gap:14px; color:#c8c8c8;
+      font-family:'Courier New',monospace;
+      font-size:.85rem; text-align:center;
+      padding:24px;
+      pointer-events:none;
+    ">
+      <div style="font-size:2rem">🎮</div>
+      <div style="color:#00d7d7;font-size:1.1rem;letter-spacing:.15em">tsspeccy</div>
+      <div style="color:#888;font-size:.75rem">ZX Spectrum 48K Emulator</div>
+      <div style="margin-top:8px;line-height:2">
+        <div>📂 Click <span style="color:#00d7d7">Load ROM</span> to select <span style="color:#d7d700">48.rom</span></div>
+        <div style="color:#555">— or —</div>
+        <div>🖱 <span style="color:#00d7d7">Drag & drop</span> any file anywhere</div>
+      </div>
+      <div style="margin-top:4px;color:#444;font-size:.7rem;line-height:1.8">
+        Supports: .rom &nbsp;·&nbsp; .z80 &nbsp;·&nbsp; .sna &nbsp;·&nbsp; .tap &nbsp;·&nbsp; .tzx
+      </div>
+    </div>
   </div>
 
   <!-- Main controls -->
