@@ -440,9 +440,14 @@ speedSelect.addEventListener('change', () => {
   spectrum.speed = parseFloat(speedSelect.value)
 })
 
-// Show approximate target FPS
+// Real FPS counter — reads measured value from FrameLoop every 500ms
 setInterval(() => {
   if (!spectrum.isRunning()) { fpsDisplay.textContent = ''; return }
-  const target = Math.min(60, Math.round(50 * spectrum.speed))
-  fpsDisplay.textContent = `~${target} fps`
+  const fps    = spectrum.fps
+  const target = Math.round(50 * spectrum.speed)
+  const colour = fps >= target - 2 ? '#00d700'   // good: green
+               : fps >= target - 8 ? '#d7af00'   // slow: amber
+               : '#d75f5f'                        // bad:  red
+  fpsDisplay.style.color = colour
+  fpsDisplay.textContent = `${fps} fps`
 }, 500)

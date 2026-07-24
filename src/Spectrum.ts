@@ -106,4 +106,7 @@ export class Spectrum {
   /** Speed multiplier: 1.0 = normal ZX Spectrum speed (50 Hz) */
   get speed(): number { return this.loop.speedFactor }
   set speed(v: number) { this.loop.speedFactor = Math.max(0.25, Math.min(8, v)) }
+
+  /** Real measured frames per second (updated once per second) */
+  get fps(): number { return this.loop.fps }
 }

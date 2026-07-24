@@ -40,6 +40,12 @@ export class FrameLoop {
   /** Speed multiplier: 1.0 = normal, 2.0 = double, 0.5 = half */
   speedFactor = 1.0
 
+  // ── Real FPS counter ─────────────────────────────────────────────
+  private fpsFrameCount = 0
+  private fpsWindowStart = 0
+  /** Frames per second measured over the last second. Updated each second. */
+  fps = 0
+
   constructor(
     private readonly cpu:      CPU,
     private readonly ula:      ULA,
@@ -152,6 +158,9 @@ export class FrameLoop {
     if (this.running) return
     this.running  = true
     this.lastTime = performance.now()
+    this.fpsWindowStart = performance.now()
+    this.fpsFrameCount = 0
+    this.fps = 0
     this.frameDebt = 0
     this.beeper.start()
     this.rafId = requestAnimationFrame(this.tick)
@@ -196,6 +205,15 @@ export class FrameLoop {
     if (framesRun > 0) {
       this.ula.renderFrame()
       this.renderer.drawFrame()
+      this.fpsFrameCount += framesRun
+    }
+
+    // Update FPS once per second of real time
+    const elapsedReal = now - this.fpsWindowStart
+    if (elapsedReal >= 1000) {
+      this.fps = Math.round(this.fpsFrameCount * 1000 / elapsedReal)
+      this.fpsFrameCount = 0
+      this.fpsWindowStart = now
     }
 
     this.rafId = requestAnimationFrame(this.tick)
